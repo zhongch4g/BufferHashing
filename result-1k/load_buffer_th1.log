@@ -1,0 +1,21 @@
+key trace size: 120000000
+Randomize the trace...------------------------------------------------
+HashType:              CCEH buflog
+Init Capacity:         16777216
+Entries:               120000000
+Trace size:            120000000
+Read:                  120000000 
+Write:                 1000000 
+Thread:                1 
+Report interval:       0 s
+Stats interval:        10000000 records
+benchmarks:            load
+------------------------------------------------
+thread  0, between 0 - 120000000
+Double the directory 
+2021/09/03-09:33:30  ... thread 0: (10000000,10000000) ops and ( 824450.7,824450.7 ) ops/second in (12.1293,12.1293) seconds
+Double the directory 
+2021/09/03-09:33:44  ... thread 0: (10000000,20000000) ops and ( 700944.7,757697.8 ) ops/second in (14.2665,26.3957) seconds
+Double the directory 
+2021/09/03-09:34:00  ... thread 0: (10000000,30000000) ops and ( 634183.9,711506.7 ) ops/second in (15.7683,42.1640) seconds
+2021/09/03-09:34:15  ... thread 0: (10000000,40000000) ops and ( 644002.1,693337.7 ) ops/second in (15.5279,57.6919) seconds

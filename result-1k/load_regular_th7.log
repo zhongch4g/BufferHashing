@@ -1,0 +1,16 @@
+key trace size: 120000000
+Randomize the trace...thread  1, between 17142857 - 34285714
+thread  2, between 34285714 - 51428571
+thread  0, between 0 - 17142857
+thread  5, between 85714285 - 102857142
+thread  3, between 51428571 - 68571428
+thread  6, between 102857142 - 119999999
+thread  4, between 68571428 - 85714285
+2021/09/02-16:13:55  ... thread 1: (10000000,10000000) ops and ( 391982.8,391982.8 ) ops/second in (25.5113,25.5113) seconds
+2021/09/02-16:13:55  ... thread 6: (10000000,10000000) ops and ( 391582.5,391582.5 ) ops/second in (25.5374,25.5374) seconds
+2021/09/02-16:13:55  ... thread 3: (10000000,10000000) ops and ( 390306.4,390306.4 ) ops/second in (25.6209,25.6209) seconds
+2021/09/02-16:13:55  ... thread 4: (10000000,10000000) ops and ( 388724.1,388724.1 ) ops/second in (25.7252,25.7252) seconds
+2021/09/02-16:13:56  ... thread 0: (10000000,10000000) ops and ( 378297.5,378297.5 ) ops/second in (26.4342,26.4342) seconds
+2021/09/02-16:13:56  ... thread 2: (10000000,10000000) ops and ( 377929.3,377929.3 ) ops/second in (26.4600,26.4600) seconds
+2021/09/02-16:13:56  ... thread 5: (10000000,10000000) ops and ( 376680.1,376680.1 ) ops/second in (26.5477,26.5477) seconds
+load         :       0.407 micros/op 2.343681 Mops/s;

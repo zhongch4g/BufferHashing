@@ -1,0 +1,24 @@
+key trace size: 120000000
+Randomize the trace...thread 10, between 109090900 - 119999990
+thread  0, between 0 - 10909090
+thread  5, between 54545450 - 65454540
+thread  9, between 98181810 - 109090900
+thread  1, between 10909090 - 21818180
+thread  4, between 43636360 - 54545450
+thread  3, between 32727270 - 43636360
+thread  2, between 21818180 - 32727270
+thread  7, between 76363630 - 87272720
+thread  6, between 65454540 - 76363630
+thread  8, between 87272720 - 98181810
+2021/09/02-16:16:04  ... thread 1: (10000000,10000000) ops and ( 253424.3,253424.3 ) ops/second in (39.4595,39.4595) seconds
+2021/09/02-16:16:06  ... thread 10: (10000000,10000000) ops and ( 240152.1,240152.1 ) ops/second in (41.6403,41.6403) seconds
+2021/09/02-16:16:06  ... thread 4: (10000000,10000000) ops and ( 240115.9,240115.9 ) ops/second in (41.6466,41.6466) seconds
+2021/09/02-16:16:08  ... thread 3: (10000000,10000000) ops and ( 231259.8,231259.8 ) ops/second in (43.2414,43.2414) seconds
+2021/09/02-16:16:08  ... thread 2: (10000000,10000000) ops and ( 229541.4,229541.4 ) ops/second in (43.5651,43.5651) seconds
+2021/09/02-16:16:09  ... thread 7: (10000000,10000000) ops and ( 228179.1,228179.1 ) ops/second in (43.8252,43.8252) seconds
+2021/09/02-16:16:09  ... thread 5: (10000000,10000000) ops and ( 227970.3,227970.3 ) ops/second in (43.8654,43.8654) seconds
+2021/09/02-16:16:09  ... thread 6: (10000000,10000000) ops and ( 226011.2,226011.2 ) ops/second in (44.2456,44.2456) seconds
+2021/09/02-16:16:09  ... thread 8: (10000000,10000000) ops and ( 225031.1,225031.1 ) ops/second in (44.4383,44.4383) seconds
+2021/09/02-16:16:11  ... thread 9: (10000000,10000000) ops and ( 217220.1,217220.1 ) ops/second in (46.0363,46.0363) seconds
+2021/09/02-16:16:12  ... thread 0: (10000000,10000000) ops and ( 210174.2,210174.2 ) ops/second in (47.5796,47.5796) seconds
+load         :       0.417 micros/op 2.288765 Mops/s;
