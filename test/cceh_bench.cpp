@@ -231,6 +231,9 @@ public:
             fprintf (stdout, "Nanoseconds per op:\n%s\n", hist_.ToString ().c_str ());
         }
 
+        FILE *fp;
+        fp = fopen("result-8k/8k-buffer.txt","a");
+        fprintf(fp,"%lf\n",throughput / 1024 / 1024);
         fflush (stdout);
         fflush (stderr);
     }
@@ -321,7 +324,7 @@ static std::string TrimSpace (std::string s) {
 
 }  // namespace
 
-#define POOL_SIZE (1073741824L * 50L)  // 50GB
+#define POOL_SIZE (1073741824L * 100L)  // 20GB
 class Benchmark {
 public:
     uint64_t num_;
@@ -436,7 +439,7 @@ public:
                 method = &Benchmark::YCSBF;
             }
 
-            IPMWatcher watcher (name);
+            // IPMWatcher watcher (name);
             if (method != nullptr) RunBenchmark (thread, name, method, print_hist);
         }
     }

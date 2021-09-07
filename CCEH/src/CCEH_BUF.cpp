@@ -8,6 +8,7 @@
 #include "CCEH_BUF.h"
 #include "hash.h"
 #include "util.h"
+#include "logger.h"
 
 #define f_seed 0xc70697UL
 #define s_seed 0xc70697UL
@@ -89,11 +90,11 @@ vector<pair<size_t, size_t>> Segment::find_path(size_t target, size_t pattern){
 }
 
 
-bool Segment::Insert4split(Key_t& key, Value_t value, size_t loc){
+bool Segment::Insert4split(Key_t& key, Value_t value, size_t loc) {
 	// Linear probing : search kNumCacheLine Buckets
-    for(int i=0; i<kNumPairPerCacheLine * kNumCacheLine; ++i){
+    for(int i = 0; i < kNumPairPerCacheLine * kNumCacheLine; ++i) {
 		auto slot = (loc + i) % kNumSlot;
-		if(bucket[slot].key == INVALID){
+		if(bucket[slot].key == INVALID) {
 			bucket[slot].key = key;
 			bucket[slot].value = value;
 			return 1;
@@ -121,6 +122,7 @@ Segment *Segment::SplitDram(WriteBuffer::Iterator &iter) {
 				if (!split->Insert4split(bucket[i].key, bucket[i].value,
 										(s_hash & kMask) * kNumPairPerCacheLine)) {
 					// insert fail
+					INFO("Hash 1 insert split segment fail ");
 				}
 			}
 			// invalidate the migrated key
@@ -146,9 +148,9 @@ Segment *Segment::SplitDram(WriteBuffer::Iterator &iter) {
 					// insert to the buffer of split segment
 					// LOG required
 					printf("second split \n");
-					// split->bufnode_->Lock();
-					// bool isValidPut = split->bufnode_->Put(key, (char*)val);
-					// split->bufnode_->Unlock();
+					split->bufnode_->Lock();
+					bool isValidPut = split->bufnode_->Put(key, (char*)val);
+					split->bufnode_->Unlock();
 				}
 			}
 		} else {
@@ -159,10 +161,7 @@ Segment *Segment::SplitDram(WriteBuffer::Iterator &iter) {
 					// insert to original segment fail
 					// insert to the buffer of split segment
 					// LOG required
-					printf("second split \n");
-					// bufnode_->Lock();
-					// bool isValidPut = bufnode_->Put(key, (char*)val);
-					// bufnode_->Unlock();
+					INFO("");
 				}
 			}
 		}

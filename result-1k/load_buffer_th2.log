@@ -1,6 +1,0 @@
-key trace size: 120000000
-Randomize the trace...thread  1, between 60000000 - 120000000
-thread  0, between 0 - 60000000
-2021/09/02-16:59:20  ... thread 0: (10000000,10000000) ops and ( 726556.2,726556.2 ) ops/second in (13.7636,13.7636) seconds
-2021/09/02-16:59:27  ... thread 1: (10000000,10000000) ops and ( 465049.1,465049.1 ) ops/second in (21.5031,21.5031) seconds
-2021/09/02-16:59:36  ... thread 0: (10000000,20000000) ops and ( 611437.7,664044.6 ) ops/second in (16.3549,30.1185) seconds

@@ -1,17 +1,0 @@
-key trace size: 120000000
-Randomize the trace...thread  2, between 48000000 - 72000000
-thread  1, between 24000000 - 48000000
-thread  4, between 96000000 - 120000000
-thread  3, between 72000000 - 96000000
-thread  0, between 0 - 24000000
-2021/09/02-16:12:45  ... thread 4: (10000000,10000000) ops and ( 551299.4,551299.4 ) ops/second in (18.1390,18.1390) seconds
-2021/09/02-16:12:45  ... thread 0: (10000000,10000000) ops and ( 551064.6,551064.6 ) ops/second in (18.1467,18.1467) seconds
-2021/09/02-16:12:45  ... thread 2: (10000000,10000000) ops and ( 547665.5,547665.5 ) ops/second in (18.2593,18.2593) seconds
-2021/09/02-16:12:46  ... thread 1: (10000000,10000000) ops and ( 514544.6,514544.6 ) ops/second in (19.4347,19.4347) seconds
-2021/09/02-16:12:47  ... thread 3: (10000000,10000000) ops and ( 509988.7,509988.7 ) ops/second in (19.6083,19.6083) seconds
-2021/09/02-16:13:06  ... thread 0: (10000000,20000000) ops and ( 472551.7,508797.1 ) ops/second in (21.1617,39.3084) seconds
-2021/09/02-16:13:06  ... thread 4: (10000000,20000000) ops and ( 470837.6,507901.6 ) ops/second in (21.2387,39.3777) seconds
-2021/09/02-16:13:07  ... thread 2: (10000000,20000000) ops and ( 468964.8,505268.9 ) ops/second in (21.3236,39.5829) seconds
-2021/09/02-16:13:09  ... thread 1: (10000000,20000000) ops and ( 439841.5,474269.4 ) ops/second in (22.7355,42.1701) seconds
-2021/09/02-16:13:09  ... thread 3: (10000000,20000000) ops and ( 436163.9,470196.2 ) ops/second in (22.9272,42.5354) seconds
-load         :       0.442 micros/op 2.159011 Mops/s;

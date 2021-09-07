@@ -14,6 +14,8 @@
 
 
 #define TOID_ARRAY(x) TOID(x)
+// 16K / BUFFER_SIZE_FACTOR = BUFFER_SIZE
+#define BUFFER_SIZE_FACTOR 2
 
 typedef size_t Key_t;
 typedef const char* Value_t;
@@ -43,7 +45,7 @@ constexpr size_t kMask = (1 << kSegmentBits) - 1;
 constexpr size_t kShift = kSegmentBits;
 constexpr size_t kSegmentSize = (1 << kSegmentBits) * 16 * 4; // 16 Bytes * 4 /per Bucket, 1 << kSegmentBits = 256 Buckets
 // constexpr size_t kWriteBufferSize = kSegmentSize / 2 / 256; 
-constexpr size_t kWriteBufferSize = kSegmentSize / 4 / 256;  // 4K buffer size
+constexpr size_t kWriteBufferSize = kSegmentSize / BUFFER_SIZE_FACTOR / 256;  // 4K buffer size
 constexpr size_t kNumPairPerCacheLine = 4;
 constexpr size_t kNumCacheLine = 8; // how many cachelines for linearprobing to search
 constexpr size_t kCuckooThreshold = 16;

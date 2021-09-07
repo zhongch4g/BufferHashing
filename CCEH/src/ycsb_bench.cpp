@@ -230,6 +230,9 @@ public:
         if (print_hist) {
             fprintf (stdout, "Nanoseconds per op:\n%s\n", hist_.ToString ().c_str ());
         }
+        FILE *fp;
+        fp = fopen("result-1k/1k-regular.txt","a");
+        fprintf(fp,"%lf\n",throughput / 1024 / 1024);
 
         fflush (stdout);
         fflush (stderr);
@@ -321,7 +324,7 @@ static std::string TrimSpace (std::string s) {
 
 }  // namespace
 
-#define POOL_SIZE (10737418240L * 10L)  // 100GB
+#define POOL_SIZE (1073741824L * 50L)  // 100GB
 class Benchmark {
 public:
     uint64_t num_;

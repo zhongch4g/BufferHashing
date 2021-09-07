@@ -9,8 +9,9 @@
 
 # numactl ./cceh_bench --thread=4 --benchmarks=load --buffer=true  --stats_interval=10000000 --num=120000000
 
-for i in {1..32}
+for i in {1..16}
 do
-# ./cceh_bench --thread=$i --benchmarks=load --buffer=false  --stats_interval=10000000 --num=120000000 | tee ./result-1k/load_regular_th$i.log
-numactl -N 0 ./cceh_bench --thread=$i --benchmarks=load --buffer=true  --stats_interval=10000000 --num=120000000 | tee ./result-1k/load_buffer_th$i.log
+# ./cceh_bench --thread=$i --benchmarks=load --stats_interval=10000000 --num=120000000 | tee ./result-1k/load_regular_th$i.log
+numactl -N 0 release/cceh_bench --thread=$i --benchmarks=load --num=120000000
+# numactl -N 0 CCEH/ycsb_bench --thread=$i --benchmarks=load --num=120000000
 done

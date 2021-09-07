@@ -1,16 +1,0 @@
-key trace size: 120000000
-Randomize the trace...thread  0, between 0 - 8571428
-thread  2, between 17142856 - 25714284
-thread  4, between 34285712 - 42857140
-thread 13, between 111428564 - 119999992
-thread  1, between 8571428 - 17142856
-thread 12, between 102857136 - 111428564
-thread 11, between 94285708 - 102857136
-thread  5, between 42857140 - 51428568
-thread  7, between 59999996 - 68571424
-thread  9, between 77142852 - 85714280
-thread 10, between 85714280 - 94285708
-thread  3, between 25714284 - 34285712
-thread  6, between 51428568 - 59999996
-thread  8, between 68571424 - 77142852
-load         :       0.437 micros/op 2.180307 Mops/s;
