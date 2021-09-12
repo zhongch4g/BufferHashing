@@ -1,0 +1,48 @@
+*SUM* | DIMM-R:   453.1 MB/s. User-R:   152.7 MB/s   | DIMM-W:    92.6 MB/s, User-W:    88.5 MB/s. Time:  86.80s
+*SUM* | DIMM-R:   645.0 MB/s. User-R:   272.5 MB/s   | DIMM-W:   196.9 MB/s, User-W:    48.1 MB/s. Time: 110.78s
+\n
+*SUM* | DIMM-R:   868.2 MB/s. User-R:   293.1 MB/s   | DIMM-W:   179.3 MB/s, User-W:   172.5 MB/s. Time:  44.56s
+*SUM* | DIMM-R:  1207.2 MB/s. User-R:   514.4 MB/s   | DIMM-W:   367.6 MB/s, User-W:    90.6 MB/s. Time:  58.26s
+\n
+*SUM* | DIMM-R:  1256.4 MB/s. User-R:   425.7 MB/s   | DIMM-W:   265.8 MB/s, User-W:   256.2 MB/s. Time:  30.01s
+*SUM* | DIMM-R:  1714.6 MB/s. User-R:   731.8 MB/s   | DIMM-W:   524.3 MB/s, User-W:   128.5 MB/s. Time:  40.84s
+\n
+*SUM* | DIMM-R:  1608.2 MB/s. User-R:   546.7 MB/s   | DIMM-W:   345.5 MB/s, User-W:   333.2 MB/s. Time:  23.06s
+*SUM* | DIMM-R:  2143.4 MB/s. User-R:   917.0 MB/s   | DIMM-W:   651.8 MB/s, User-W:   160.6 MB/s. Time:  32.55s
+\n
+*SUM* | DIMM-R:  1936.8 MB/s. User-R:   658.2 MB/s   | DIMM-W:   422.1 MB/s, User-W:   407.2 MB/s. Time:  18.88s
+*SUM* | DIMM-R:  2531.1 MB/s. User-R:  1082.1 MB/s   | DIMM-W:   765.7 MB/s, User-W:   188.8 MB/s. Time:  27.60s
+\n
+*SUM* | DIMM-R:  2255.7 MB/s. User-R:   766.7 MB/s   | DIMM-W:   496.0 MB/s, User-W:   478.2 MB/s. Time:  16.08s
+*SUM* | DIMM-R:  2853.2 MB/s. User-R:  1221.0 MB/s   | DIMM-W:   858.0 MB/s, User-W:   212.3 MB/s. Time:  24.52s
+\n
+*SUM* | DIMM-R:  2556.7 MB/s. User-R:   870.4 MB/s   | DIMM-W:   568.2 MB/s, User-W:   547.5 MB/s. Time:  14.04s
+*SUM* | DIMM-R:  3076.2 MB/s. User-R:  1314.0 MB/s   | DIMM-W:   927.3 MB/s, User-W:   227.9 MB/s. Time:  22.77s
+\n
+*SUM* | DIMM-R:  2841.2 MB/s. User-R:   967.5 MB/s   | DIMM-W:   635.4 MB/s, User-W:   612.0 MB/s. Time:  12.58s
+*SUM* | DIMM-R:  3354.2 MB/s. User-R:  1435.3 MB/s   | DIMM-W:  1003.8 MB/s, User-W:   248.3 MB/s. Time:  20.90s
+\n
+*SUM* | DIMM-R:  2884.4 MB/s. User-R:   973.5 MB/s   | DIMM-W:   660.6 MB/s, User-W:   636.1 MB/s. Time:  12.11s
+*SUM* | DIMM-R:  3145.3 MB/s. User-R:  1335.2 MB/s   | DIMM-W:   964.1 MB/s, User-W:   236.0 MB/s. Time:  21.99s
+\n
+*SUM* | DIMM-R:  3065.9 MB/s. User-R:  1027.0 MB/s   | DIMM-W:   715.8 MB/s, User-W:   689.4 MB/s. Time:  11.18s
+*SUM* | DIMM-R:  3358.6 MB/s. User-R:  1422.9 MB/s   | DIMM-W:  1034.5 MB/s, User-W:   255.2 MB/s. Time:  20.34s
+\n
+*SUM* | DIMM-R:  3269.3 MB/s. User-R:  1087.7 MB/s   | DIMM-W:   775.9 MB/s, User-W:   747.3 MB/s. Time:  10.32s
+*SUM* | DIMM-R:  3444.5 MB/s. User-R:  1452.6 MB/s   | DIMM-W:  1071.2 MB/s, User-W:   263.9 MB/s. Time:  19.64s
+\n
+*SUM* | DIMM-R:  3439.5 MB/s. User-R:  1137.8 MB/s   | DIMM-W:   825.6 MB/s, User-W:   795.2 MB/s. Time:   9.69s
+*SUM* | DIMM-R:  3463.0 MB/s. User-R:  1451.3 MB/s   | DIMM-W:  1091.9 MB/s, User-W:   268.1 MB/s. Time:  19.34s
+\n
+*SUM* | DIMM-R:  3561.3 MB/s. User-R:  1170.4 MB/s   | DIMM-W:   868.3 MB/s, User-W:   836.2 MB/s. Time:   9.23s
+*SUM* | DIMM-R:  3582.7 MB/s. User-R:  1500.1 MB/s   | DIMM-W:  1133.4 MB/s, User-W:   280.1 MB/s. Time:  18.52s
+\n
+*SUM* | DIMM-R:  3699.4 MB/s. User-R:  1208.0 MB/s   | DIMM-W:   917.0 MB/s, User-W:   882.2 MB/s. Time:   8.76s
+*SUM* | DIMM-R:  3620.5 MB/s. User-R:  1512.9 MB/s   | DIMM-W:  1156.9 MB/s, User-W:   286.1 MB/s. Time:  18.14s
+\n
+*SUM* | DIMM-R:  3831.6 MB/s. User-R:  1246.0 MB/s   | DIMM-W:   963.5 MB/s, User-W:   926.5 MB/s. Time:   8.34s
+*SUM* | DIMM-R:  3566.1 MB/s. User-R:  1484.1 MB/s   | DIMM-W:  1151.7 MB/s, User-W:   284.1 MB/s. Time:  18.26s
+\n
+*SUM* | DIMM-R:  3936.4 MB/s. User-R:  1274.8 MB/s   | DIMM-W:  1003.2 MB/s, User-W:   964.0 MB/s. Time:   8.02s
+*SUM* | DIMM-R:  3449.5 MB/s. User-R:  1427.0 MB/s   | DIMM-W:  1126.8 MB/s, User-W:   276.6 MB/s. Time:  18.74s
+\n

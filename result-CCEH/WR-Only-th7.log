@@ -1,0 +1,45 @@
+key trace size: 120000000
+Randomize the trace...------------------------------------------------
+HashType:              CCEH
+Init Capacity:         16777216
+Entries:               120000000
+Trace size:            120000000
+Read:                  1000000 
+Write:                 1000000 
+Thread:                7 
+Report interval:       0 s
+Stats interval:        10000000 records
+benchmarks:            load,readall
+------------------------------------------------
+[32mStart IPMWatcher for load
+[0m2021/09/07-11:44:13  ... thread 3: (10000000,10000000) ops and ( 549605.7,549605.7 ) ops/second in (18.1949,18.1949) seconds
+2021/09/07-11:44:13  ... thread 5: (10000000,10000000) ops and ( 549391.2,549391.2 ) ops/second in (18.2020,18.2020) seconds
+2021/09/07-11:44:13  ... thread 4: (10000000,10000000) ops and ( 548768.7,548768.7 ) ops/second in (18.2226,18.2226) seconds
+2021/09/07-11:44:13  ... thread 2: (10000000,10000000) ops and ( 548661.5,548661.5 ) ops/second in (18.2262,18.2262) seconds
+2021/09/07-11:44:13  ... thread 0: (10000000,10000000) ops and ( 547997.0,547997.0 ) ops/second in (18.2483,18.2483) seconds
+2021/09/07-11:44:13  ... thread 1: (10000000,10000000) ops and ( 547847.7,547847.7 ) ops/second in (18.2532,18.2532) seconds
+2021/09/07-11:44:13  ... thread 6: (10000000,10000000) ops and ( 546857.1,546857.1 ) ops/second in (18.2863,18.2863) seconds
+load         :       0.281 micros/op 3.397276 Mops/s;
+DIMM0 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      29268.98 |       13276.50 |    63964.87 |     42748.67 |   2.19 |   3.22 |
+DIMM1 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      18413.46 |        7348.38 |    30194.50 |     18628.75 |   1.64 |   2.54 |
+*SUM* | DIMM-R:  2777.6 MB/s. User-R:  1406.6 MB/s   | DIMM-W:  1810.6 MB/s, User-W:   608.4 MB/s. Time:  33.90s
+[32mDestroy IPMWatcher.
+[0m
+Randomize the trace...[32mStart IPMWatcher for readall
+[0mthread  6, between 102857142 - 119999999
+thread  2, between 34285714 - 51428571
+thread  1, between 17142857 - 34285714
+thread  5, between 85714285 - 102857142
+thread  0, between 0 - 17142857
+thread  4, between 68571428 - 85714285
+thread  3, between 51428571 - 68571428
+readall      :       0.206 micros/op 4.631588 Mops/s; (num: 17142857, not find: 0)
+DIMM0 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |       1452.55 |         406.57 |     3701.84 |      1654.93 |   2.55 |   4.07 |
+DIMM1 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |        682.65 |           0.01 |     1356.76 |         1.55 |   1.99 | 162.09 |
+*SUM* | DIMM-R:  3016.5 MB/s. User-R:  1273.2 MB/s   | DIMM-W:   987.8 MB/s, User-W:   242.4 MB/s. Time:   1.68s
+[32mDestroy IPMWatcher.
+[0m

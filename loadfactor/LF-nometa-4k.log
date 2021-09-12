@@ -1,0 +1,38 @@
+key trace size: 120000000
+Randomize the trace...------------------------------------------------
+HashType:              CCEH buflog
+Init Capacity:         16777216
+Entries:               120000000
+Trace size:            120000000
+Read:                  120000000 
+Write:                 1000000 
+Thread:                16 
+Report interval:       0 s
+Stats interval:        10000000 records
+benchmarks:            load
+------------------------------------------------
+[32mStart IPMWatcher for load
+[0mAverage Load Factor : 0.70 
+Average Load Factor : 0.70 
+Average Load Factor : 0.70 
+Average Load Factor : 0.70 
+Average Load Factor : 0.70 
+Average Load Factor : 0.70 
+Average Load Factor : 0.70 
+Average Load Factor : 0.70 
+Average Load Factor : 0.70 
+Average Load Factor : 0.70 
+Average Load Factor : 0.70 
+Average Load Factor : 0.70 
+Average Load Factor : 0.70 
+Average Load Factor : 0.70 
+Average Load Factor : 0.70 
+Average Load Factor : 0.70 
+load         :       0.125 micros/op 7.604370 Mops/s;
+DIMM0 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      13414.38 |       11240.45 |    35961.48 |     11902.20 |   2.68 |   1.06 |
+DIMM1 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |       4949.49 |       11037.27 |     7131.80 |     11385.12 |   1.44 |   1.03 |
+*SUM* | DIMM-R:  2824.7 MB/s. User-R:  1203.7 MB/s   | DIMM-W:  1526.4 MB/s, User-W:  1460.3 MB/s. Time:  15.26s
+[32mDestroy IPMWatcher.
+[0m

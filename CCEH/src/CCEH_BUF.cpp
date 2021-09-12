@@ -147,7 +147,7 @@ Segment *Segment::SplitDram(WriteBuffer::Iterator &iter) {
 					// insert to split segment fail
 					// insert to the buffer of split segment
 					// LOG required
-					printf("second split \n");
+					INFO("Split segment \n");
 					split->bufnode_->Lock();
 					bool isValidPut = split->bufnode_->Put(key, (char*)val);
 					split->bufnode_->Unlock();
@@ -161,7 +161,7 @@ Segment *Segment::SplitDram(WriteBuffer::Iterator &iter) {
 					// insert to original segment fail
 					// insert to the buffer of split segment
 					// LOG required
-					INFO("");
+					INFO("Origin segment");
 				}
 			}
 		}
@@ -327,6 +327,9 @@ void CCEH::initCCEH(PMEMobjpool* pop){
 	POBJ_ALLOC(pop, &D_RO(D_RO(dir)->segment)[i], struct Segment, sizeof(struct Segment), NULL, NULL);
 	D_RW(D_RW(D_RW(dir)->segment)[i])->initSegment();
     }
+
+	buffer_writes = 0;
+	buffer_kvs = 0;
 }
 
 void CCEH::initCCEH(PMEMobjpool* pop, size_t initCap){
@@ -339,6 +342,42 @@ void CCEH::initCCEH(PMEMobjpool* pop, size_t initCap){
 		POBJ_ALLOC(pop, &D_RO(D_RO(dir)->segment)[i], struct Segment, sizeof(struct Segment), NULL, NULL);
 		D_RW(D_RW(D_RW(dir)->segment)[i])->initSegment(static_cast<size_t>(log2(initCap)));
     }
+	buffer_writes = 0;
+	buffer_kvs = 0;
+}
+
+double buffer_load_factor(WriteBuffer* bufnode) {
+	size_t total_valid_count = 0;
+	size_t total_space = 12 * kWriteBufferSize;
+	// iterate all the valid node in write buffer
+	for (size_t i = 0; i < kWriteBufferSize; i++) {
+		total_valid_count += bufnode->nodes_[i].ValidCount();
+	}
+	double load_factor = (double)(total_valid_count * 16) / (256 * kWriteBufferSize);
+	// printf("total_valid_count = %lu, total_space = %lu, Load Factor : %2.2f \n",total_valid_count, total_space, load_factor);
+	return load_factor;
+}
+
+double CCEH::AverageBufLoadFactor() {
+	return buffer_kvs/buffer_writes;
+}
+
+void CCEH::checkBufferData() {
+	size_t key_left = 0;
+	// traverse all the segment
+	size_t cnt = 0;
+    for(int i=0; i<D_RO(dir)->capacity; cnt++){
+		auto target = D_RO(D_RO(dir)->segment)[i];
+		auto target_ptr = D_RW(target);
+		for (size_t j = 0; j < kWriteBufferSize; j++) {
+			key_left += target_ptr->bufnode_->nodes_[j].ValidCount();
+		}
+		int stride = pow(2, D_RO(dir)->depth - D_RO(target)->local_depth);
+		i += stride;
+    }
+	printf("# of key left : %lu \n", key_left);
+	// the number of slots
+    // return cnt * Segment::kNumSlot;
 }
 
 void CCEH::Insert(PMEMobjpool* pop, Key_t& key, Value_t value) {
@@ -352,6 +391,12 @@ retry:
     auto target = D_RO(D_RO(dir)->segment)[x];
 	/* write the target segment */
 	auto target_ptr = D_RW(target);
+
+	/* to check whether current segment come with buffer or not */
+	if (!target_ptr->buf_flag) {
+		return;
+	}
+
 
 	/* add lock when buffer insert */
 	target_ptr->bufnode_->Lock();
@@ -372,6 +417,11 @@ retry:
 	if (isValidPut) {
 		target_ptr->bufnode_->Unlock();
 	} else {
+		double load_factor = buffer_load_factor(target_ptr->bufnode_);
+		buffer_writes += 1;
+		buffer_kvs += load_factor;
+		// printf("# of Merge %lu,avg LF = %2.2f \n", buffer_writes, buffer_kvs/buffer_writes);
+
 		/* the buffer is full, merge the buffer to the segment (OUT-OF-PLACE Merge) */
 #ifndef CONFIG_OUT_OF_PLACE_MERGE
 		auto iter = D_RW(target)->bufnode_->Begin();
@@ -410,24 +460,6 @@ RETRY:
 	/* MSB ex. (dir-depth-length-leading-bit) 11111000... Get the position of the target segment */
     auto x = (f_hash >> (8 * sizeof(f_hash) - D_RO(dir)->depth));
     auto target = D_RO(D_RO(dir)->segment)[x]; // the target segment
-
-	// char val[128] = "value123";
-	/* check the buffer has enough space or not (Inside the Put func)*/
-	// bool valid_Put = nodes_[x].Put((int64_t)key, (char*)value);
-	// bool isValidPut = writeBuffer_[x].Put((int64_t)key, (char*)value);
-	
-
-	/*
-	uint64_t segFullCheck = 1;
-	for (size_t j = 0; j < 13; j++) {
-		// printf("%lu out of 13 : Key %lu, value %s \n", j, nodes_[x].kvs_[j].key, nodes_[x].kvs_[j].val);
-		if (nodes_[x].kvs_[j].val)
-			segFullCheck++;
-	}
-	printf("%lu Segment space usage %lu//13 \n", x, segFullCheck);
-	if (segFullCheck == 12)
-		printf("Segment full, current index = %lu \n", key);
-	*/
 
     if(!D_RO(target)) {
 		std::this_thread::yield();
@@ -662,7 +694,10 @@ void CCEH::mergeBufAndSplitWhenNeeded(PMEMobjpool* pop, WriteBuffer* bufnode, Se
 		auto f_hash = h(&key, sizeof(Key_t));
 		// locate the bucket (f_hash & kMask) * kNumPairPerCacheLine
 		if (!old_segment_dram.Insert4split(key, val, (f_hash & kMask) * kNumPairPerCacheLine)) {
-			break;
+			// if can not insert, try another hash function
+			auto s_hash = hash_funcs[2](&key, sizeof(Key_t), s_seed);
+			if (!old_segment_dram.Insert4split(key, val, (s_hash & kMask) * kNumPairPerCacheLine)) 
+				break;
 		}
 		++iter;
 	}

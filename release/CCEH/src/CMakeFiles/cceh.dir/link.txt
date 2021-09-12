@@ -1,0 +1,2 @@
+/usr/bin/ar qc libcceh.a  CMakeFiles/cceh.dir/CCEH_BUF.cpp.o
+/usr/bin/ranlib libcceh.a

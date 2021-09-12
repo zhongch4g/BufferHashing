@@ -1,0 +1,46 @@
+key trace size: 120000000
+Randomize the trace...------------------------------------------------
+HashType:              CCEH buflog
+Init Capacity:         16777216
+Entries:               120000000
+Trace size:            120000000
+Read:                  120000000 
+Write:                 1000000 
+Thread:                15 
+Report interval:       0 s
+Stats interval:        10000000 records
+benchmarks:            load,readall
+------------------------------------------------
+[32mStart IPMWatcher for load
+[0mload         :       0.341 micros/op 2.793867 Mops/s;
+DIMM0 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      44278.46 |       55386.23 |    77003.15 |     59097.85 |   1.74 |   1.07 |
+DIMM1 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      28011.93 |       54276.02 |    34922.91 |     55984.83 |   1.25 |   1.03 |
+*SUM* | DIMM-R:  2715.7 MB/s. User-R:  1754.0 MB/s   | DIMM-W:  2792.3 MB/s, User-W:  2660.8 MB/s. Time:  41.21s
+[32mDestroy IPMWatcher.
+[0m
+Randomize the trace...[32mStart IPMWatcher for readall
+[0mthread 12 num: 8000000, not find: 28347
+thread  1 num: 8000000, not find: 28901
+thread  8 num: 8000000, not find: 28762
+thread  0 num: 8000000, not find: 28605
+thread 11 num: 8000000, not find: 28767
+thread  9 num: 8000000, not find: 28961
+thread  5 num: 8000000, not find: 28675
+thread  2 num: 8000000, not find: 28801
+thread 14 num: 8000000, not find: 28494
+thread  7 num: 8000000, not find: 28973
+thread  6 num: 8000000, not find: 28844
+thread  4 num: 8000000, not find: 28798
+thread  3 num: 8000000, not find: 28756
+thread 10 num: 8000000, not find: 28773
+thread 13 num: 8000000, not find: 28985
+readall      :       0.192 micros/op 4.957281 Mops/s; (num: 8000000, not find: 28605)
+DIMM0 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      19024.71 |        6726.93 |    54560.84 |     27359.65 |   2.87 |   4.07 |
+DIMM1 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      11434.85 |           0.01 |    24655.43 |        24.15 |   2.16 | 1774.65 |
+*SUM* | DIMM-R:  3403.3 MB/s. User-R:  1308.6 MB/s   | DIMM-W:  1176.5 MB/s, User-W:   289.0 MB/s. Time:  23.28s
+[32mDestroy IPMWatcher.
+[0m

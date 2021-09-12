@@ -231,7 +231,7 @@ public:
             fprintf (stdout, "Nanoseconds per op:\n%s\n", hist_.ToString ().c_str ());
         }
         FILE *fp;
-        fp = fopen("result-1k/1k-regular.txt","a");
+        fp = fopen("result-CCEH/CCEH.txt","a");
         fprintf(fp,"%lf\n",throughput / 1024 / 1024);
 
         fflush (stdout);
@@ -400,6 +400,10 @@ public:
                 fresh_db = false;
                 key_trace_->Randomize ();
                 method = &Benchmark::DoRead;
+            } else if (name == "readall") {
+                fresh_db = false;
+                key_trace_->Randomize ();
+                method = &Benchmark::DoReadAll;
             } else if (name == "readnon") {
                 fresh_db = false;
                 key_trace_->Randomize ();
@@ -414,6 +418,10 @@ public:
                 print_hist = true;
                 key_trace_->Randomize ();
                 method = &Benchmark::DoReadNonLat;
+            } else if (name == "readwhilewriting") {
+                fresh_db = false;
+                key_trace_->Randomize ();
+                method = &Benchmark::ReadWhileWriting;
             } else if (name == "ycsba") {
                 fresh_db = false;
                 key_trace_->Randomize ();
@@ -465,6 +473,40 @@ public:
         }
         char buf[100];
         snprintf (buf, sizeof (buf), "(num: %lu, not find: %lu)", reads_, not_find);
+        thread->stats.AddMessage (buf);
+    }
+
+    void DoReadAll (ThreadState* thread) {
+        uint64_t batch = FLAGS_batch;
+        if (key_trace_ == nullptr) {
+            perror ("DoReadAll lack key_trace_ initialization.");
+            return;
+        }
+        size_t interval = num_ / FLAGS_thread;
+        size_t start_offset = thread->tid * interval;
+        auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
+        // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+        //         start_offset + interval);
+
+        size_t not_find = 0;
+
+        Duration duration (FLAGS_readtime, reads_);
+        thread->stats.Start ();
+        while (!duration.Done (batch) && key_iterator.Valid ()) {
+            uint64_t j = 0;
+            for (; j < batch && key_iterator.Valid (); j++) {
+                size_t ikey = key_iterator.Next ();
+                auto ret = D_RW (hashtable_)->Get (ikey);
+                if (ret != reinterpret_cast<Value_t> (ikey)) {
+                    not_find++;
+                }
+            }
+            thread->stats.FinishedBatchOp (j);
+        }
+        char buf[100];
+        snprintf (buf, sizeof (buf), "(num: %lu, not find: %lu)", interval, not_find);
+        if (not_find)
+            printf ("thread %2d num: %lu, not find: %lu\n", thread->tid, interval, not_find);
         thread->stats.AddMessage (buf);
     }
 
@@ -523,6 +565,35 @@ public:
         snprintf (buf, sizeof (buf), "(num: %lu, not find: %lu)", reads_, not_find);
         thread->stats.AddMessage (buf);
     }
+
+    void ReadWhileWriting (ThreadState* thread) {
+        if (key_trace_ == nullptr) {
+            perror ("ReadWhileWriting lack key_trace_ initialization.");
+            return;
+        }
+        // Only one of the thread is writing
+        if (thread->tid > 0) {
+            DoRead(thread);
+        } else {
+            uint64_t batch = FLAGS_batch;
+            // Special thread that keeps writing until other threads are done.
+            size_t interval = num_;
+            auto key_iterator = key_trace_->iterate_between(0, 0 + interval);
+
+            thread->stats.Start();
+            while (key_iterator.Valid()) {
+                uint64_t j = 0;
+                for (; j < batch && key_iterator.Valid(); j++) {
+                    size_t ikey = key_iterator.Next();
+                    D_RW(hashtable_)->Insert(pop_, ikey, reinterpret_cast<Value_t> (ikey));
+                }
+                // Do not count any of the preceding work/delay in stats.
+                thread->stats.FinishedBatchOp(j);
+            }
+        }
+
+    }
+
 
     void DoReadNonLat (ThreadState* thread) {
         if (key_trace_ == nullptr) {

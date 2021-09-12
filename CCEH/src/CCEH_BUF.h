@@ -45,7 +45,7 @@ constexpr size_t kMask = (1 << kSegmentBits) - 1;
 constexpr size_t kShift = kSegmentBits;
 constexpr size_t kSegmentSize = (1 << kSegmentBits) * 16 * 4; // 16 Bytes * 4 /per Bucket, 1 << kSegmentBits = 256 Buckets
 // constexpr size_t kWriteBufferSize = kSegmentSize / 2 / 256; 
-constexpr size_t kWriteBufferSize = kSegmentSize / BUFFER_SIZE_FACTOR / 256;  // 4K buffer size
+constexpr size_t kWriteBufferSize = (kSegmentSize / BUFFER_SIZE_FACTOR / 256) * (1 + 0.3);  // 4K buffer size
 constexpr size_t kNumPairPerCacheLine = 4;
 constexpr size_t kNumCacheLine = 8; // how many cachelines for linearprobing to search
 constexpr size_t kCuckooThreshold = 16;
@@ -55,6 +55,9 @@ constexpr size_t kCuckooThreshold = 16;
 
 // The way to use the class with template
 using WriteBuffer = buflog::WriteBuffer<kWriteBufferSize>;
+
+// to limit the number of buffer in use
+std::atomic<uint32_t> bufnum(4000);
 
 struct Segment{
 	// the maximum number of kv pair in Segment
@@ -70,7 +73,16 @@ struct Segment{
 		}
 		local_depth = 0;
 		sema = 0;
-		bufnode_ = new WriteBuffer();
+
+		assert (bufnum >= 0);
+		if (bufnum > 0) { 
+			bufnode_ = new WriteBuffer();
+			bufnum -= 1;
+			buf_flag = true;
+		} else {
+			buf_flag = false;
+		}
+		
     }
 
     void initSegment(size_t depth){
@@ -80,7 +92,15 @@ struct Segment{
 		}
 		local_depth = depth;
 		sema = 0;
-		bufnode_ = new WriteBuffer(depth);
+
+		assert (bufnum >= 0);
+		if (bufnum > 0) { 
+			bufnode_ = new WriteBuffer(depth);
+			bufnum -= 1;
+			buf_flag = true;
+		} else {
+			buf_flag = false;
+		}
     }
 
     bool suspend(void){
@@ -129,6 +149,8 @@ struct Segment{
     int64_t sema = 0;
     size_t local_depth;
     WriteBuffer* bufnode_;
+	// the flag to tell this segment has buffer or not
+	bool buf_flag = false; 
 };
 
 struct Directory{
@@ -211,6 +233,17 @@ public:
 	void Recovery(PMEMobjpool*);
 
 	bool crashed = true;
+
+	// record the number of buffer merge to pmem
+	uint32_t buffer_writes;
+	// record the number of valid key in buffer(when merge to pmem)
+	double buffer_kvs;
+	double AverageBufLoadFactor(void);
+
+	// check data in segment
+	void checkBufferData();
+
+
 private:
 	TOID(struct Directory) dir;
 };

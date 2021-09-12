@@ -1,0 +1,34 @@
+key trace size: 120000000
+Randomize the trace...------------------------------------------------
+HashType:              CCEH buflog
+Init Capacity:         16777216
+Entries:               120000000
+Trace size:            120000000
+Read:                  120000000 
+Write:                 1000000 
+Thread:                13 
+Report interval:       0 s
+Stats interval:        10000000 records
+benchmarks:            load,readall
+------------------------------------------------
+[32mStart IPMWatcher for load
+[0mload         :       0.122 micros/op 7.810071 Mops/s;
+DIMM0 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      16418.94 |       13098.58 |    42226.03 |     13816.25 |   2.57 |   1.05 |
+DIMM1 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |       5878.88 |       12878.26 |     9164.64 |     13279.09 |   1.56 |   1.03 |
+*SUM* | DIMM-R:  3460.0 MB/s. User-R:  1501.2 MB/s   | DIMM-W:  1824.2 MB/s, User-W:  1748.9 MB/s. Time:  14.85s
+[32mDestroy IPMWatcher.
+[0m
+Randomize the trace...[32mStart IPMWatcher for readall
+[0mthread  4 num: 9230769, not find: 1
+thread  7 num: 9230769, not find: 1
+thread  1 num: 9230769, not find: 1
+readall      :       0.171 micros/op 5.593023 Mops/s; (num: 9230769, not find: 0)
+DIMM0 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      17956.88 |        6043.66 |    50455.44 |     24436.42 |   2.81 |   4.04 |
+DIMM1 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      10033.83 |           3.34 |    20141.26 |        24.35 |   2.01 |   7.30 |
+*SUM* | DIMM-R:  3408.7 MB/s. User-R:  1351.5 MB/s   | DIMM-W:  1181.1 MB/s, User-W:   292.0 MB/s. Time:  20.71s
+[32mDestroy IPMWatcher.
+[0m

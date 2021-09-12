@@ -42,6 +42,7 @@ DEFINE_uint64 (read, 0, "Number of read operations");
 DEFINE_uint64 (write, 1 * 1000000, "Number of read operations");
 DEFINE_bool (hist, false, "");
 DEFINE_string (benchmarks, "load,readall", "");
+DEFINE_uint32 (writeThreads, 1, "For readwhilewriting, determine how many write threads out of 16 threads.");
 
 namespace {
 
@@ -50,7 +51,9 @@ public:
     int tid_;
     double start_;
     double finish_;
+    double real_finish_;
     double seconds_;
+    double ignore_seconds_;
     double next_report_time_;
     double last_op_finish_;
     unsigned last_level_compaction_num_;
@@ -76,6 +79,7 @@ public:
         done_ = 0;
         seconds_ = 0;
         finish_ = start_;
+        real_finish_ = 0;
         message_.clear ();
         hist_.Clear ();
     }
@@ -92,9 +96,9 @@ public:
     }
 
     void Stop () {
-        finish_ = NowMicros ();
+        
+        finish_ = !real_finish_? NowMicros():real_finish_;
         seconds_ = (finish_ - start_) * 1e-6;
-        ;
     }
 
     void StartSingleOp () { last_op_finish_ = NowMicros (); }
@@ -227,13 +231,16 @@ public:
         printf ("%-12s : %11.3f micros/op %lf Mops/s;%s%s\n", name.ToString ().c_str (),
                 elapsed * 1e6 / done_, throughput / 1024 / 1024, (extra.empty () ? "" : " "),
                 extra.c_str ());
+
+        printf ("%llu operations, %2.2f real_elapsed \n", done_, elapsed);
+
         if (print_hist) {
             fprintf (stdout, "Nanoseconds per op:\n%s\n", hist_.ToString ().c_str ());
         }
 
-        FILE *fp;
-        fp = fopen("result-8k/8k-buffer.txt","a");
-        fprintf(fp,"%lf\n",throughput / 1024 / 1024);
+        // FILE *fp;
+        // fp = fopen("result-8k/8k-buffer.txt","a");
+        // fprintf(fp,"%lf\n",throughput / 1024 / 1024);
         fflush (stdout);
         fflush (stderr);
     }
@@ -418,6 +425,10 @@ public:
                 print_hist = true;
                 key_trace_->Randomize ();
                 method = &Benchmark::DoReadNonLat;
+            } else if (name == "readwhilewriting") {
+                fresh_db = false;
+                key_trace_->Randomize ();
+                method = &Benchmark::ReadWhileWriting;
             } else if (name == "ycsba") {
                 fresh_db = false;
                 key_trace_->Randomize ();
@@ -439,7 +450,7 @@ public:
                 method = &Benchmark::YCSBF;
             }
 
-            // IPMWatcher watcher (name);
+            IPMWatcher watcher (name);
             if (method != nullptr) RunBenchmark (thread, name, method, print_hist);
         }
     }
@@ -481,8 +492,8 @@ public:
         size_t interval = num_ / FLAGS_thread;
         size_t start_offset = thread->tid * interval;
         auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
-        printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
-                start_offset + interval);
+        // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+        //         start_offset + interval);
 
         size_t not_find = 0;
 
@@ -562,6 +573,44 @@ public:
         thread->stats.AddMessage (buf);
     }
 
+    void ReadWhileWriting (ThreadState* thread) {
+        if (key_trace_ == nullptr) {
+            perror ("ReadWhileWriting lack key_trace_ initialization.");
+            return;
+        }
+
+        // Only one of the thread is writing
+        if (thread->tid > FLAGS_writeThreads - 1) {
+            DoRead(thread);
+        } else {
+            while (true) {
+                // exclusive access
+                std::unique_lock<std::mutex> lck (thread->shared->mu);
+                if (thread->shared->num_done < thread->shared->num_initialized) {
+                    break;
+                }
+            }
+
+            uint64_t batch = FLAGS_batch;
+            // Special thread that keeps writing until other threads are done.
+            size_t interval = num_ / (FLAGS_writeThreads);
+            size_t start_offset = thread->tid * interval;
+            auto key_iterator = key_trace_->iterate_between(start_offset, start_offset + interval);
+
+            thread->stats.Start();
+            while (key_iterator.Valid()) {
+                uint64_t j = 0;
+                for (; j < batch && key_iterator.Valid(); j++) {
+                    size_t ikey = key_iterator.Next();
+                    D_RW(hashtable_)->Insert(pop_, ikey, reinterpret_cast<Value_t> (ikey));
+                }
+                // Do not count any of the preceding work/delay in stats.
+                thread->stats.FinishedBatchOp(j);
+            }
+        }
+
+    }
+
     void DoReadNonLat (ThreadState* thread) {
         if (key_trace_ == nullptr) {
             perror ("DoReadLat lack key_trace_ initialization.");
@@ -599,8 +648,8 @@ public:
         size_t interval = num_ / FLAGS_thread;
         size_t start_offset = thread->tid * interval;
         auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
-        printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
-                start_offset + interval);
+        // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+        //         start_offset + interval);
         thread->stats.Start ();
         std::string val (value_size_, 'v');
         size_t inserted = 0;
@@ -611,7 +660,24 @@ public:
                 size_t ikey = key_iterator.Next ();
                 D_RW (hashtable_)->Insert (pop_, ikey, reinterpret_cast<Value_t> (ikey));
             }
+            // printf("load factor : %2.2f \n", D_RW (hashtable_)->buffer_kvs/ D_RW (hashtable_)->buffer_writes);
+
             thread->stats.FinishedBatchOp (j);
+        }
+        
+        thread->stats.real_finish_ = NowMicros();
+
+        // printf("thread->shared->num_done = %d, thread->shared->num_initialized = %d \n", thread->shared->num_done == thread->shared->num_initialized);
+        // while (thread->shared->num_done < thread->shared->num_initialized) {
+            // TODO: 
+            // printf("Average Load Factor : %2.2f \n", alf);
+        // }
+        sleep(3);
+        if (thread->tid == 0){
+            double alf = D_RW (hashtable_)->AverageBufLoadFactor();
+            printf("Average Load Factor : %2.2f \n", alf);
+
+            D_RW (hashtable_)->checkBufferData();
         }
         return;
     }

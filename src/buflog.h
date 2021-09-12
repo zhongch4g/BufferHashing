@@ -679,11 +679,12 @@ struct BufVec {
 template<size_t NUM>
 class WriteBuffer {
 public:
-    static_assert(__builtin_popcount(NUM) == 1, "NUM should be power of 2");
-    static constexpr size_t kNodeNumMask = NUM - 1;
+    // static_assert(__builtin_popcount(NUM) == 1, "NUM should be power of 2");
+    // static constexpr size_t kNodeNumMask = NUM - 1;
     static constexpr size_t kNodeNum = NUM;
-    static constexpr size_t kProbeLen = NUM / 2 - 1;
-    
+    static constexpr size_t kProbeLen = (NUM / 2 - 1) < 4? 3: (NUM / 2 - 1);
+
+
     WriteBuffer() {
         local_depth = 0;
     }
@@ -699,7 +700,8 @@ public:
         int bucket_to_insert = -1;
         int slot_to_insert = -1;
         for (int p = 0; p < kProbeLen; ++p) {
-            int idx = (hash + p) & kNodeNumMask;
+            // int idx = (hash + p) & kNodeNumMask;
+            int idx = (hash + p) % NUM;
             SortedBufNode& bucket = nodes_[idx];
             auto empty_bitset = bucket.EmptyBitSet();
 
@@ -740,7 +742,8 @@ public:
         size_t hash = Hasher::hash_int(key);
         uint8_t tag = hash & 0xFF;
         for (int p = 0; p < kProbeLen; ++p) {
-            int idx = (hash + p) & kNodeNumMask;
+            // int idx = (hash + p) & kNodeNumMask;
+            int idx = (hash + p) % NUM;
             SortedBufNode& bucket = nodes_[idx];
 
             for (int i : bucket.MatchBitSet(tag)) {
@@ -763,7 +766,8 @@ public:
         size_t hash = Hasher::hash_int(key);
         size_t tag  = hash & 0xFF;
         for (int p = 0; p < kProbeLen; ++p) {
-            int idx = (hash + p) & kNodeNumMask;
+            // int idx = (hash + p) & kNodeNumMask;
+            int idx = (hash + p) % NUM;
             SortedBufNode& bucket = nodes_[idx];
 
             for (int i : bucket.MatchBitSet(tag)) {

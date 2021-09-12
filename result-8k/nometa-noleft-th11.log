@@ -1,0 +1,63 @@
+key trace size: 123000000
+Randomize the trace...------------------------------------------------
+HashType:              CCEH buflog
+Init Capacity:         16777216
+Entries:               123000000
+Trace size:            123000000
+Read:                  123000000 
+Write:                 1000000 
+Thread:                11 
+Report interval:       0 s
+Stats interval:        10000000 records
+benchmarks:            load,readall
+------------------------------------------------
+[32mStart IPMWatcher for load
+[0m2021/09/11-17:16:38  ... thread 2: (10000000,10000000) ops and ( 1144208.4,1144208.4 ) ops/second in (8.7397,8.7397) seconds
+2021/09/11-17:16:38  ... thread 0: (10000000,10000000) ops and ( 1140115.3,1140115.3 ) ops/second in (8.7710,8.7710) seconds
+2021/09/11-17:16:38  ... thread 9: (10000000,10000000) ops and ( 1137404.9,1137404.9 ) ops/second in (8.7919,8.7919) seconds
+2021/09/11-17:16:38  ... thread 6: (10000000,10000000) ops and ( 1130873.9,1130873.9 ) ops/second in (8.8427,8.8427) seconds
+2021/09/11-17:16:38  ... thread 10: (10000000,10000000) ops and ( 1130643.4,1130643.4 ) ops/second in (8.8445,8.8445) seconds
+2021/09/11-17:16:38  ... thread 7: (10000000,10000000) ops and ( 1128830.6,1128830.6 ) ops/second in (8.8587,8.8587) seconds
+2021/09/11-17:16:38  ... thread 3: (10000000,10000000) ops and ( 1126530.6,1126530.6 ) ops/second in (8.8768,8.8768) seconds
+2021/09/11-17:16:38  ... thread 4: (10000000,10000000) ops and ( 1122599.4,1122599.4 ) ops/second in (8.9079,8.9079) seconds
+2021/09/11-17:16:38  ... thread 1: (10000000,10000000) ops and ( 1105968.6,1105968.6 ) ops/second in (9.0418,9.0418) seconds
+2021/09/11-17:16:38  ... thread 8: (10000000,10000000) ops and ( 1098354.2,1098354.2 ) ops/second in (9.1045,9.1045) seconds
+2021/09/11-17:16:38  ... thread 5: (10000000,10000000) ops and ( 1090909.8,1090909.8 ) ops/second in (9.1667,9.1667) seconds
+Average Load Factor : 0.72 
+# of key left : 37906356 
+load         :       0.094 micros/op 10.185257 Mops/s;
+122999998 operations, 11.52 real_elapsed 
+DIMM0 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      10658.23 |        5605.71 |    33318.04 |      5882.78 |   3.13 |   1.05 |
+DIMM1 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |       2039.24 |        5517.54 |     3534.14 |      5698.69 |   1.73 |   1.03 |
+*SUM* | DIMM-R:  2501.7 MB/s. User-R:   862.0 MB/s   | DIMM-W:   786.2 MB/s, User-W:   755.1 MB/s. Time:  14.73s
+[32mDestroy IPMWatcher.
+[0m
+Randomize the trace...[32mStart IPMWatcher for readall
+[0m2021/09/11-17:17:06  ... thread 7: (10000000,10000000) ops and ( 619251.2,619251.2 ) ops/second in (16.1485,16.1485) seconds
+2021/09/11-17:17:06  ... thread 1: (10000000,10000000) ops and ( 618211.2,618211.2 ) ops/second in (16.1757,16.1757) seconds
+2021/09/11-17:17:06  ... thread 6: (10000000,10000000) ops and ( 617392.5,617392.5 ) ops/second in (16.1972,16.1972) seconds
+2021/09/11-17:17:06  ... thread 2: (10000000,10000000) ops and ( 615717.2,615717.2 ) ops/second in (16.2412,16.2412) seconds
+2021/09/11-17:17:06  ... thread 0: (10000000,10000000) ops and ( 615484.2,615484.2 ) ops/second in (16.2474,16.2474) seconds
+thread  6 num: 11181818, not find: 1
+thread  2 num: 11181818, not find: 1
+thread  0 num: 11181818, not find: 1
+2021/09/11-17:17:08  ... thread 10: (10000000,10000000) ops and ( 541783.9,541783.9 ) ops/second in (18.4575,18.4575) seconds
+2021/09/11-17:17:08  ... thread 3: (10000000,10000000) ops and ( 541516.4,541516.4 ) ops/second in (18.4667,18.4667) seconds
+2021/09/11-17:17:08  ... thread 8: (10000000,10000000) ops and ( 541440.2,541440.2 ) ops/second in (18.4693,18.4693) seconds
+2021/09/11-17:17:08  ... thread 5: (10000000,10000000) ops and ( 541299.4,541299.4 ) ops/second in (18.4741,18.4741) seconds
+2021/09/11-17:17:08  ... thread 4: (10000000,10000000) ops and ( 540799.0,540799.0 ) ops/second in (18.4912,18.4912) seconds
+2021/09/11-17:17:08  ... thread 9: (10000000,10000000) ops and ( 540755.2,540755.2 ) ops/second in (18.4927,18.4927) seconds
+thread  5 num: 11181818, not find: 1
+thread  4 num: 11181818, not find: 1
+thread  9 num: 11181818, not find: 1
+readall      :       0.163 micros/op 5.867987 Mops/s; (num: 11181818, not find: 1)
+122999998 operations, 19.99 real_elapsed 
+DIMM0 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      19475.36 |        4999.01 |    53603.56 |     20227.12 |   2.75 |   4.05 |
+DIMM1 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      10917.52 |           3.34 |    21644.94 |        24.43 |   1.98 |   7.33 |
+*SUM* | DIMM-R:  3729.1 MB/s. User-R:  1506.2 MB/s   | DIMM-W:  1003.6 MB/s, User-W:   247.9 MB/s. Time:  20.18s
+[32mDestroy IPMWatcher.
+[0m
