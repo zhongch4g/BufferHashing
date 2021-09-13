@@ -357,6 +357,7 @@ public:
         }
 
         const size_t initialSize = 1024 * FLAGS_initsize;  // 16 million initial
+        // const size_t initialSize = 4;
         hashtable_ = POBJ_ROOT (pop_, CCEH);
         D_RW (hashtable_)->initCCEH (pop_, initialSize);
     }
@@ -674,8 +675,8 @@ public:
         // }
         sleep(3);
         if (thread->tid == 0){
-            double alf = D_RW (hashtable_)->AverageBufLoadFactor();
-            printf("Average Load Factor : %2.2f \n", alf);
+            // double alf = D_RW (hashtable_)->AverageBufLoadFactor();
+            // printf("Average Load Factor : %2.2f \n", alf);
 
             D_RW (hashtable_)->checkBufferData();
         }

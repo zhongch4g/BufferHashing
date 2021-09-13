@@ -19,6 +19,10 @@
 // #define WITHOUT_FLUSH
 #define CONFIG_OUT_OF_PLACE_MERGE
 
+// to limit the number of buffer in use
+std::atomic<uint32_t> bufnum(0);
+
+
 using namespace std;
 
 void Segment::execute_path(PMEMobjpool* pop, vector<pair<size_t, size_t>>& path, Key_t& key, Value_t value){
@@ -148,9 +152,13 @@ Segment *Segment::SplitDram(WriteBuffer::Iterator &iter) {
 					// insert to the buffer of split segment
 					// LOG required
 					INFO("Split segment \n");
-					split->bufnode_->Lock();
-					bool isValidPut = split->bufnode_->Put(key, (char*)val);
-					split->bufnode_->Unlock();
+					// if (!split->buf_flag) {
+					// 	split->bufnode_->Lock();
+					// 	bool isValidPut = split->bufnode_->Put(key, (char*)val);
+					// 	split->bufnode_->Unlock();
+					// } else {
+					// 	INFO("Need to consider multi-split...");
+					// }
 				}
 			}
 		} else {
@@ -323,9 +331,9 @@ void CCEH::initCCEH(PMEMobjpool* pop){
     POBJ_ALLOC(pop, &D_RW(dir)->segment, TOID(struct Segment), sizeof(TOID(struct Segment))*D_RO(dir)->capacity, NULL, NULL);
 
     for(int i=0; i<D_RO(dir)->capacity; ++i){
-	// allocate space for all segment
-	POBJ_ALLOC(pop, &D_RO(D_RO(dir)->segment)[i], struct Segment, sizeof(struct Segment), NULL, NULL);
-	D_RW(D_RW(D_RW(dir)->segment)[i])->initSegment();
+		// allocate space for all segment
+		POBJ_ALLOC(pop, &D_RO(D_RO(dir)->segment)[i], struct Segment, sizeof(struct Segment), NULL, NULL);
+		D_RW(D_RW(D_RW(dir)->segment)[i])->initSegment();
     }
 
 	buffer_writes = 0;
@@ -335,13 +343,14 @@ void CCEH::initCCEH(PMEMobjpool* pop){
 void CCEH::initCCEH(PMEMobjpool* pop, size_t initCap){
     crashed = true;
     POBJ_ALLOC(pop, &dir, struct Directory, sizeof(struct Directory), NULL, NULL);
-    D_RW(dir)->initDirectory(static_cast<size_t>(log2(initCap)));
+    D_RW(dir)->initDirectory(static_cast<size_t>(log2(initCap))); // log2 (16*1024) = 14
     POBJ_ALLOC(pop, &D_RW(dir)->segment, TOID(struct Segment), sizeof(TOID(struct Segment))*D_RO(dir)->capacity, NULL, NULL);
 
     for(int i=0; i<D_RO(dir)->capacity; ++i) {
 		POBJ_ALLOC(pop, &D_RO(D_RO(dir)->segment)[i], struct Segment, sizeof(struct Segment), NULL, NULL);
 		D_RW(D_RW(D_RW(dir)->segment)[i])->initSegment(static_cast<size_t>(log2(initCap)));
     }
+	printf("Finished the initialize of the CCEH. \n");
 	buffer_writes = 0;
 	buffer_kvs = 0;
 }
@@ -366,18 +375,25 @@ void CCEH::checkBufferData() {
 	size_t key_left = 0;
 	// traverse all the segment
 	size_t cnt = 0;
+	size_t bufcnt = 0;
     for(int i=0; i<D_RO(dir)->capacity; cnt++){
 		auto target = D_RO(D_RO(dir)->segment)[i];
 		auto target_ptr = D_RW(target);
-		for (size_t j = 0; j < kWriteBufferSize; j++) {
-			key_left += target_ptr->bufnode_->nodes_[j].ValidCount();
+
+		if (target_ptr->buf_flag) {
+			bufcnt += 1;
+			for (size_t j = 0; j < kWriteBufferSize; j++) {
+				key_left += target_ptr->bufnode_->nodes_[j].ValidCount();
+			}
 		}
+
 		int stride = pow(2, D_RO(dir)->depth - D_RO(target)->local_depth);
 		i += stride;
     }
 	printf("# of key left : %lu \n", key_left);
-	// the number of slots
-    // return cnt * Segment::kNumSlot;
+
+	printf("dir capacity %lu, # of buffers : %lu \n", D_RO(dir)->capacity, bufcnt);
+
 }
 
 void CCEH::Insert(PMEMobjpool* pop, Key_t& key, Value_t value) {
@@ -394,9 +410,9 @@ retry:
 
 	/* to check whether current segment come with buffer or not */
 	if (!target_ptr->buf_flag) {
+		insert(pop, key, value, true);
 		return;
 	}
-
 
 	/* add lock when buffer insert */
 	target_ptr->bufnode_->Lock();
@@ -417,9 +433,12 @@ retry:
 	if (isValidPut) {
 		target_ptr->bufnode_->Unlock();
 	} else {
-		double load_factor = buffer_load_factor(target_ptr->bufnode_);
-		buffer_writes += 1;
-		buffer_kvs += load_factor;
+		// if (!target_ptr->buf_flag) {
+		// 	double load_factor = buffer_load_factor(target_ptr->bufnode_);
+		// 	buffer_writes += 1;
+		// 	buffer_kvs += load_factor;
+		// }
+
 		// printf("# of Merge %lu,avg LF = %2.2f \n", buffer_writes, buffer_kvs/buffer_writes);
 
 		/* the buffer is full, merge the buffer to the segment (OUT-OF-PLACE Merge) */
@@ -897,10 +916,10 @@ double CCEH::Utilization(void){
 
 size_t CCEH::Capacity(void){
     size_t cnt = 0;
-    for(int i=0; i<D_RO(dir)->capacity; cnt++){
-	auto target = D_RO(D_RO(dir)->segment)[i];
-	int stride = pow(2, D_RO(dir)->depth - D_RO(target)->local_depth);
-	i += stride;
+    for(int i = 0; i < D_RO(dir)->capacity; cnt++){
+		auto target = D_RO(D_RO(dir)->segment)[i];
+		int stride = pow(2, D_RO(dir)->depth - D_RO(target)->local_depth);
+		i += stride;
     }
 
     return cnt * Segment::kNumSlot;

@@ -16,6 +16,7 @@
 #define TOID_ARRAY(x) TOID(x)
 // 16K / BUFFER_SIZE_FACTOR = BUFFER_SIZE
 #define BUFFER_SIZE_FACTOR 2
+#define kBufNumMax 10000
 
 typedef size_t Key_t;
 typedef const char* Value_t;
@@ -57,7 +58,7 @@ constexpr size_t kCuckooThreshold = 16;
 using WriteBuffer = buflog::WriteBuffer<kWriteBufferSize>;
 
 // to limit the number of buffer in use
-std::atomic<uint32_t> bufnum(4000);
+extern std::atomic<uint32_t> bufnum;
 
 struct Segment{
 	// the maximum number of kv pair in Segment
@@ -74,13 +75,15 @@ struct Segment{
 		local_depth = 0;
 		sema = 0;
 
-		assert (bufnum >= 0);
-		if (bufnum > 0) { 
-			bufnode_ = new WriteBuffer();
-			bufnum -= 1;
-			buf_flag = true;
-		} else {
-			buf_flag = false;
+
+		uint32_t tmp = bufnum.load(std::memory_order_relaxed);
+		if (tmp < kBufNumMax) {
+			uint32_t BN = bufnum.fetch_add(1, std::memory_order_relaxed);
+			if (BN < kBufNumMax) { 
+				printf("Avaliable buffer : %lu \n", BN);
+				bufnode_ = new WriteBuffer();
+				buf_flag = true;
+			}
 		}
 		
     }
@@ -93,32 +96,37 @@ struct Segment{
 		local_depth = depth;
 		sema = 0;
 
-		assert (bufnum >= 0);
-		if (bufnum > 0) { 
-			bufnode_ = new WriteBuffer(depth);
-			bufnum -= 1;
-			buf_flag = true;
-		} else {
-			buf_flag = false;
+		// printf("initial segment \n");
+		uint32_t tmp = bufnum.load(std::memory_order_relaxed);
+		// printf("tmp = %u\n", tmp);
+		if (tmp < kBufNumMax) {
+			uint32_t BN = bufnum.fetch_add(1, std::memory_order_relaxed);
+			// printf("BN = %u\n", BN);
+			if (BN < kBufNumMax) { 
+				// printf("Current buffer : %lu \n", BN);
+				bufnode_ = new WriteBuffer(depth);
+				buf_flag = true;
+			}
 		}
+		
     }
 
-    bool suspend(void){
-	int64_t val;
-	do{
-	    val = sema;
-	    if(val < 0)
-		return false;
-	}while(!CAS(&sema, &val, -1));
+    bool suspend(void) {
+		int64_t val;
+		do {
+			val = sema;
+			if(val < 0)
+				return false;
+		} while(!CAS(&sema, &val, -1));
 
-	int64_t wait = 0 - val - 1;
-	while(val && sema != wait){
-	    asm("nop");
-	}
-	return true;
+		int64_t wait = 0 - val - 1;
+		while (val && sema != wait){
+			asm("nop");
+		}
+		return true;
     }
 
-    bool lock(void){
+    bool lock(void) {
 		int64_t val = sema;
 		while(val > -1){
 			if(CAS(&sema, &val, val+1))
@@ -188,25 +196,25 @@ struct Directory{
     }
 
     void unlock(void){
-	int64_t val = sema;
-	while(!CAS(&sema, &val, val-1)){
-	    val = sema;
-	}
+		int64_t val = sema;
+		while(!CAS(&sema, &val, val-1)){
+			val = sema;
+		}
     }
 
     Directory(void){ }
     ~Directory(void){ }
 
     void initDirectory(void){
-	depth = kDefaultDepth;
-	capacity = pow(2, depth);
-	sema = 0;
+		depth = kDefaultDepth;
+		capacity = pow(2, depth);
+		sema = 0;
     }
 
     void initDirectory(size_t _depth){
-	depth = _depth;
-	capacity = pow(2, _depth);
-	sema = 0;
+		depth = _depth;
+		capacity = pow(2, _depth);
+		sema = 0;
     }
 };
 
