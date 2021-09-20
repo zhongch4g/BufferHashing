@@ -206,6 +206,12 @@ public:
             "User-W: %7.1f MB/s. Time: %6.2fs\n",
             media_read_size_MB / seconds, imc_read_size_MB / seconds, media_write_size_MB / seconds,
             imc_write_size_MB / seconds, seconds);
+        printf (
+            "*SUMSUM* | DIMM-R: %7.1f MB| User-R: %7.1f MB   | DIMM-W: %7.1f "
+            "MB | "
+            "User-W: %7.1f MB | Time: %6.2fs\n",
+            media_read_size_MB , imc_read_size_MB, media_write_size_MB,
+            imc_write_size_MB , seconds);
 
         delete start;
         delete end;

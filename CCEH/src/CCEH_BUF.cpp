@@ -22,6 +22,9 @@
 // to limit the number of buffer in use
 std::atomic<uint32_t> bufnum(0);
 
+// to record current # of segment
+std::atomic<uint32_t> curSegnumNum(0);
+
 
 using namespace std;
 
@@ -115,7 +118,7 @@ Segment *Segment::SplitDram(WriteBuffer::Iterator &iter) {
 	// local depth increase 1 after split! Move the KV to new segment according to pattern
 	auto pattern = ((size_t)1 << (sizeof(Key_t) * 8 - local_depth - 1));
 
-	// traverse all the kv pairs in Segment
+	// traverse all the kv pairs in old Segment
 	for (int i = 0; i < kNumSlot; ++i) {
 		auto f_hash = h(&bucket[i].key, sizeof(Key_t));
 		if (f_hash & pattern) {
@@ -153,15 +156,18 @@ Segment *Segment::SplitDram(WriteBuffer::Iterator &iter) {
 					// LOG required
 					INFO("Split segment \n");
 					// if (!split->buf_flag) {
-					// 	split->bufnode_->Lock();
-					// 	bool isValidPut = split->bufnode_->Put(key, (char*)val);
-					// 	split->bufnode_->Unlock();
+						// split->bufnode_->Lock();
+						// bool isValidPut = split->bufnode_->Put(key, (char*)val);
+						// split->bufnode_->Unlock();
 					// } else {
 					// 	INFO("Need to consider multi-split...");
 					// }
+
+					break;
 				}
 			}
 		} else {
+			// insert to origin segment
 			if (!Insert4split(key, val, (f_hash & kMask) * kNumPairPerCacheLine)) {
 				// try another hash function
 				auto s_hash = hash_funcs[2](&key, sizeof(Key_t), s_seed);
@@ -170,6 +176,7 @@ Segment *Segment::SplitDram(WriteBuffer::Iterator &iter) {
 					// insert to the buffer of split segment
 					// LOG required
 					INFO("Origin segment");
+					break;
 				}
 			}
 		}
@@ -322,7 +329,7 @@ TOID(struct Segment)* Segment::Split(PMEMobjpool* pop){
 #endif
 }
 
-void CCEH::initCCEH(PMEMobjpool* pop){
+void CCEH::initCCEH(PMEMobjpool* pop) {
     crashed = true;
 	// allocate space for directory
     POBJ_ALLOC(pop, &dir, struct Directory, sizeof(struct Directory), NULL, NULL);
@@ -334,13 +341,15 @@ void CCEH::initCCEH(PMEMobjpool* pop){
 		// allocate space for all segment
 		POBJ_ALLOC(pop, &D_RO(D_RO(dir)->segment)[i], struct Segment, sizeof(struct Segment), NULL, NULL);
 		D_RW(D_RW(D_RW(dir)->segment)[i])->initSegment();
+		// add the # of segment
+		curSegnumNum.fetch_add(1, std::memory_order_relaxed);
     }
 
 	buffer_writes = 0;
 	buffer_kvs = 0;
 }
 
-void CCEH::initCCEH(PMEMobjpool* pop, size_t initCap){
+void CCEH::initCCEH(PMEMobjpool* pop, size_t initCap) {
     crashed = true;
     POBJ_ALLOC(pop, &dir, struct Directory, sizeof(struct Directory), NULL, NULL);
     D_RW(dir)->initDirectory(static_cast<size_t>(log2(initCap))); // log2 (16*1024) = 14
@@ -349,8 +358,10 @@ void CCEH::initCCEH(PMEMobjpool* pop, size_t initCap){
     for(int i=0; i<D_RO(dir)->capacity; ++i) {
 		POBJ_ALLOC(pop, &D_RO(D_RO(dir)->segment)[i], struct Segment, sizeof(struct Segment), NULL, NULL);
 		D_RW(D_RW(D_RW(dir)->segment)[i])->initSegment(static_cast<size_t>(log2(initCap)));
+		// add the # of segment
+		curSegnumNum.fetch_add(1, std::memory_order_relaxed);
     }
-	printf("Finished the initialize of the CCEH. \n");
+	// printf("Finished the initialize of the CCEH. \n");
 	buffer_writes = 0;
 	buffer_kvs = 0;
 }
@@ -376,10 +387,11 @@ void CCEH::checkBufferData() {
 	// traverse all the segment
 	size_t cnt = 0;
 	size_t bufcnt = 0;
+	size_t segmentcnt = 0;
     for(int i=0; i<D_RO(dir)->capacity; cnt++){
 		auto target = D_RO(D_RO(dir)->segment)[i];
 		auto target_ptr = D_RW(target);
-
+		segmentcnt += 1;
 		if (target_ptr->buf_flag) {
 			bufcnt += 1;
 			for (size_t j = 0; j < kWriteBufferSize; j++) {
@@ -392,7 +404,9 @@ void CCEH::checkBufferData() {
     }
 	printf("# of key left : %lu \n", key_left);
 
-	printf("dir capacity %lu, # of buffers : %lu \n", D_RO(dir)->capacity, bufcnt);
+	// printf("# of segments : %lu, # of buffers : %lu, curSegnumNum = %lu\n", segmentcnt, bufcnt, curSegnumNum.load());
+	// printf("# of segments : %lu, # of buffers : %lu\n", segmentcnt, curSegnumNum.load());
+	printf("# of segments : %lu, # of buffers : %lu\n", segmentcnt, bufcnt);
 
 }
 
@@ -601,14 +615,15 @@ DIR_RETRY:
 			std::this_thread::yield();
 			goto DIR_RETRY;
 		}
+		// printf("Double the dir %d\n", D_RO(dir)->depth);
 
-		x = (f_hash >> (8*sizeof(f_hash) - D_RO(dir)->depth));
+		x = (f_hash >> (8 * sizeof(f_hash) - D_RO(dir)->depth));
 		auto dir_old = dir;
 		TOID_ARRAY(TOID(struct Segment)) d = D_RO(dir)->segment;
 		TOID(struct Directory) _dir;
 		POBJ_ALLOC(pop, &_dir, struct Directory, sizeof(struct Directory), NULL, NULL);
 		POBJ_ALLOC(pop, &D_RO(_dir)->segment, TOID(struct Segment), sizeof(TOID(struct Segment))*D_RO(dir)->capacity*2, NULL, NULL);
-		D_RW(_dir)->initDirectory(D_RO(dir)->depth+1);
+		D_RW(_dir)->initDirectory(D_RO(dir)->depth + 1);
 
 		for(int i = 0; i < D_RO(dir)->capacity; ++i){
 			if(i == x) {
@@ -691,6 +706,10 @@ DIR_RETRY:
 	#endif
 		}
     }
+
+	// add the # of segment
+	curSegnumNum.fetch_add(1, std::memory_order_relaxed);
+
     std::this_thread::yield();
     goto RETRY;
 }
@@ -742,6 +761,8 @@ void CCEH::mergeBufAndSplitWhenNeeded(PMEMobjpool* pop, WriteBuffer* bufnode, Se
 		/* persist the new segment after split */
 		pmemobj_memcpy(pop, D_RW(new_segment), new_segment_dram, sizeof(struct Segment), PMEMOBJ_F_MEM_NONTEMPORAL);
 		pmemobj_drain(pop);
+
+		curSegnumNum.fetch_add(1, std::memory_order_relaxed);
 
 		/* step 3. Set the directory */
 		MERGE_SPLIT_RETRY:
@@ -812,9 +833,31 @@ void CCEH::mergeBufAndSplitWhenNeeded(PMEMobjpool* pop, WriteBuffer* bufnode, Se
 			D_RW(dir)->unlock();
 			}
 		
+		auto split_ptr = D_RW(split_segment);	
+		auto new_ptr = D_RW(new_segment);
+		auto pattern = ((size_t)1 << sizeof(Key_t) * 8 - split_ptr->local_depth);
+		/* step 4. Buffer merge triggers segment multi-split */
+		while (iter.Valid()) {
+			auto &kv = *iter;
+			Key_t key = kv.key;
+			Value_t val = kv.val;
+			auto f_hash = h(&key, sizeof(Key_t));
+			/* to check whether current segment come with buffer or not */
+			if (f_hash & pattern) {
+				if (split_ptr->buf_flag) {
+					Insert(pop, key, val);
+				} else {
+					insert(pop, key, val, true);
+				}
+				new_ptr->bufnode_->Delete(key);
+			}
+			else {
+				// new segment?
+			}
+			++iter;
+		} 
 	} else {
 		// all records in bufnode has been merge to new_segment_dram
-
 		TOID(struct Segment) new_segment;
 		POBJ_ALLOC(pop, &new_segment, struct Segment, sizeof(struct Segment), NULL,NULL);
 		// persist the new segment

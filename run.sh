@@ -1,23 +1,36 @@
 # sudo ../CCEH-PMDK/ycsb_bench --thread=1 --benchmarks=load,readrandom,readnon  --num=120000000
 # num - number of total record
 # read - number of read operations
-# write - number of write operations
-# sudo ../CCEH-PMDK/ycsb_bench --thread=1 --benchmarks=load,readrandom  --num=120000000
 
-# numactl -N $SOCKET_NO sudo ../CCEH-PMDK/ycsb_bench --thread=$t --benchmarks=load,readrandom,readnon --stats_interval=10000000 --read=10000000 --num=120000000 | tee thread.cceh_$t
-
-# numactl ./cceh_bench --thread=4 --benchmarks=load --buffer=true  --stats_interval=10000000 --num=120000000
-
-# for i in {1..16}
+# for nb in 70000 140000
 # do
-# ./cceh_bench --thread=$i --benchmarks=load --stats_interval=10000000 --num=120000000 | tee ./result-1k/load_regular_th$i.log
-# numactl -N 0 release/cceh_bench --thread=$i --benchmarks=load --num=120000000
-# sudo numactl -N 0 release/cceh_bench --thread=$i --benchmarks=load,readall --num=120000000 | tee ./result-16k/WR-Only-th$i.log
-# sudo numactl -N 0 CCEH/ycsb_bench --thread=$i --benchmarks=load,readall --num=120000000 | tee ./result-CCEH/WR-Only-th$i.log
-# sudo numactl -N 0 release/cceh_bench --thread=$i --benchmarks=load,readall --num=123000000 | tee ./result-8k/nometa-noleft-th${i}.log
+#     # replace the number
+#     sed -i '19s/[0-9]*[1-9][0-9]*/'${nb}'/g' /home/zhongchen/CCEH-BUFLOG/CCEH/src/CCEH_BUF.h
+#     for factor in 16 8 4 2 1
+#     do
+#         sed -i '18s/[0-9]*[1-9][0-9]*/'${factor}'/g' /home/zhongchen/CCEH-BUFLOG/CCEH/src/CCEH_BUF.h
+#         cd release && make -j32 && cd ..
+#         for i in {1..16}
+#         do
+#             sudo numactl -N 0 release/cceh_bench --thread=$i --benchmarks=load --num=120000000 >> ./result-$((16/$factor))k/limit-buffer-${nb}.log
+#         done
+#     done
 # done
 
-for num in {110000000..130000000..2000000}
+# For no buffer limited version
+
+# for factor in 16 8 4 2 1
+# do
+#     sed -i '18s/[0-9]*[1-9][0-9]*/'${factor}'/g' /home/zhongchen/CCEH-BUFLOG/CCEH/src/CCEH_BUF.h
+#     cd release && make -j32 && cd ..
+#     for i in {1..16}
+#     do
+#         sudo numactl -N 0 release/cceh_bench --thread=$i --benchmarks=load --num=120000000 >> ./result-$((16/$factor))k/unlimit-buffer.log
+#     done
+# done
+
+for i in {1..16}
+# for i in {6..16}
 do
-    sudo numactl -N 0 release/cceh_bench --thread=16 --benchmarks=load --num=$num >> 8K-num.log
+    sudo numactl -N 0 release/cceh_bench --thread=$i --benchmarks=load --num=120000000 >> ./result-4k/varies-buffer-0.7.log
 done

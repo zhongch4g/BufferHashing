@@ -30,7 +30,8 @@ using GFLAGS_NAMESPACE::RegisterFlagValidator;
 using GFLAGS_NAMESPACE::SetUsageMessage;
 
 DEFINE_int32 (initsize, 16, "initial capacity in million");
-DEFINE_string (filepath, "/mnt/pmem/objpool.data", "");
+DEFINE_string (filepath, "/mnt/pmem0/objpool.data", "");
+// DEFINE_string (filepath1, "/mnt/pmem1/objpool.data", "");
 DEFINE_uint32 (batch, 1000000, "report batch");
 DEFINE_uint32 (readtime, 0, "if 0, then we read all keys");
 DEFINE_uint32 (thread, 1, "");
@@ -108,13 +109,13 @@ public:
         int64_t usecs_since_last = now - last_report_finish_;
 
         std::string cur_time = TimeToString (now / 1000000);
-        printf (
-            "%s ... thread %d: (%lu,%lu) ops and "
-            "( %.1f,%.1f ) ops/second in (%.4f,%.4f) seconds\n",
-            cur_time.c_str (), tid_, done_ - last_report_done_, done_,
-            (done_ - last_report_done_) / (usecs_since_last / 1000000.0),
-            done_ / ((now - start_) / 1000000.0), (now - last_report_finish_) / 1000000.0,
-            (now - start_) / 1000000.0);
+        // printf (
+        //     "%s ... thread %d: (%lu,%lu) ops and "
+        //     "( %.1f,%.1f ) ops/second in (%.4f,%.4f) seconds\n",
+        //     cur_time.c_str (), tid_, done_ - last_report_done_, done_,
+        //     (done_ - last_report_done_) / (usecs_since_last / 1000000.0),
+        //     done_ / ((now - start_) / 1000000.0), (now - last_report_finish_) / 1000000.0,
+        //     (now - start_) / 1000000.0);
         last_report_finish_ = now;
         last_report_done_ = done_;
         fflush (stdout);
@@ -228,9 +229,10 @@ public:
 
         double throughput = (double)done_ / elapsed;
 
-        printf ("%-12s : %11.3f micros/op %lf Mops/s;%s%s\n", name.ToString ().c_str (),
-                elapsed * 1e6 / done_, throughput / 1024 / 1024, (extra.empty () ? "" : " "),
-                extra.c_str ());
+        // The throughput data for none buffer cceh
+        // printf ("%-12s : %11.3f micros/op %lf Mops/s;%s%s\n", name.ToString ().c_str (),
+        //         elapsed * 1e6 / done_, throughput / 1024 / 1024, (extra.empty () ? "" : " "),
+        //         extra.c_str ());
 
         printf ("%llu operations, %2.2f real_elapsed \n", done_, elapsed);
 
@@ -366,13 +368,13 @@ public:
 
     void Run () {
         trace_size_ = FLAGS_num;
-        printf ("key trace size: %lu\n", trace_size_);
-        key_trace_ = new RandomKeyTrace (trace_size_);
+        key_trace_ = new RandomKeyTrace (trace_size_); // a 1 dim trace_size_ long vector
         if (reads_ == 0) {
             reads_ = key_trace_->count_;
             FLAGS_read = key_trace_->count_;
         }
-        PrintHeader ();
+        // current program info
+        // PrintHeader ();
         bool fresh_db = true;
         // run benchmark
         bool print_hist = false;
@@ -392,6 +394,10 @@ public:
             if (name == "load") {
                 fresh_db = true;
                 method = &Benchmark::DoWrite;
+            }
+            if (name == "loadbuf") {
+                fresh_db = true;
+                method = &Benchmark::DoWriteBuf;
             }
             if (name == "loadlat") {
                 fresh_db = true;
@@ -449,6 +455,10 @@ public:
                 fresh_db = false;
                 key_trace_->Randomize ();
                 method = &Benchmark::YCSBF;
+            } else if (name == "writenbybrid") {
+                fresh_db = false;
+                key_trace_->Randomize ();
+                method = &Benchmark::writenhybrid;
             }
 
             IPMWatcher watcher (name);
@@ -682,6 +692,46 @@ public:
         }
         return;
     }
+
+    void DoWriteBuf (ThreadState* thread) {
+        uint64_t batch = FLAGS_batch;
+        if (key_trace_ == nullptr) {
+            perror ("DoWrite lack key_trace_ initialization.");
+            return;
+        }
+        size_t interval = num_ / FLAGS_thread;
+        size_t start_offset = thread->tid * interval;
+        auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
+
+        thread->stats.Start ();
+        std::string val (value_size_, 'v');
+        size_t inserted = 0;
+        while (key_iterator.Valid ()) {
+            uint64_t j = 0;
+            for (; j < batch && key_iterator.Valid (); j++) {
+                inserted++;
+                size_t ikey = key_iterator.Next ();
+                D_RW (hashtable_)->Insert (pop_, ikey, reinterpret_cast<Value_t> (ikey));
+                if (inserted % 6000000 == 0) {
+                    printf("current ops: %lu ", inserted);
+                    D_RW (hashtable_)->checkBufferData();
+                }
+            }
+            thread->stats.FinishedBatchOp (j);
+        }
+        
+        thread->stats.real_finish_ = NowMicros();
+
+        sleep(3);
+        if (thread->tid == 0){
+            // double alf = D_RW (hashtable_)->AverageBufLoadFactor();
+            // printf("Average Load Factor : %2.2f \n", alf);
+
+            D_RW (hashtable_)->checkBufferData();
+        }
+        return;
+    }
+    
 
     void DoWriteLat (ThreadState* thread) {
         if (key_trace_ == nullptr) {
@@ -927,6 +977,14 @@ public:
         snprintf (buf, sizeof (buf), "(read_modify: %lu, read: %lu)", insert, find);
         thread->stats.AddMessage (buf);
         return;
+    }
+
+    void writenhybrid (ThreadState* thread) {
+        uint64_t batch = FLAGS_batch;
+        if (key_trace_ == nullptr) {
+            perror ("write & hybrid key_trace_ initialization.");
+            return;
+        }
     }
 
 private:

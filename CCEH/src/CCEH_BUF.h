@@ -15,8 +15,9 @@
 
 #define TOID_ARRAY(x) TOID(x)
 // 16K / BUFFER_SIZE_FACTOR = BUFFER_SIZE
-#define BUFFER_SIZE_FACTOR 2
-#define kBufNumMax 10000
+#define BUFFER_SIZE_FACTOR 4
+#define kBufNumMax 1
+#define bufferRate 0.7
 
 typedef size_t Key_t;
 typedef const char* Value_t;
@@ -59,6 +60,7 @@ using WriteBuffer = buflog::WriteBuffer<kWriteBufferSize>;
 
 // to limit the number of buffer in use
 extern std::atomic<uint32_t> bufnum;
+extern std::atomic<uint32_t> curSegnumNum;
 
 struct Segment{
 	// the maximum number of kv pair in Segment
@@ -75,14 +77,27 @@ struct Segment{
 		local_depth = 0;
 		sema = 0;
 
+		uint32_t requiredBufNum;
 
-		uint32_t tmp = bufnum.load(std::memory_order_relaxed);
-		if (tmp < kBufNumMax) {
-			uint32_t BN = bufnum.fetch_add(1, std::memory_order_relaxed);
-			if (BN < kBufNumMax) { 
-				printf("Avaliable buffer : %lu \n", BN);
-				bufnode_ = new WriteBuffer();
-				buf_flag = true;
+		if (kBufNumMax < 0) {
+			bufnode_ = new WriteBuffer();
+			buf_flag = true;
+		} else {
+			// The # of buffer depends on the # of segment.
+			if (bufferRate > 0) {
+				requiredBufNum = bufferRate * curSegnumNum;
+			} else {
+				requiredBufNum = kBufNumMax;
+			}
+
+			uint32_t tmp = bufnum.load(std::memory_order_relaxed);
+			if (tmp < requiredBufNum) {
+				uint32_t BN = bufnum.fetch_add(1, std::memory_order_relaxed);
+				if (BN < requiredBufNum) { 
+					// printf("Avaliable buffer : %lu \n", BN);
+					bufnode_ = new WriteBuffer();
+					buf_flag = true;
+				}
 			}
 		}
 		
@@ -96,16 +111,27 @@ struct Segment{
 		local_depth = depth;
 		sema = 0;
 
-		// printf("initial segment \n");
-		uint32_t tmp = bufnum.load(std::memory_order_relaxed);
-		// printf("tmp = %u\n", tmp);
-		if (tmp < kBufNumMax) {
-			uint32_t BN = bufnum.fetch_add(1, std::memory_order_relaxed);
-			// printf("BN = %u\n", BN);
-			if (BN < kBufNumMax) { 
-				// printf("Current buffer : %lu \n", BN);
-				bufnode_ = new WriteBuffer(depth);
-				buf_flag = true;
+		uint32_t requiredBufNum;
+
+		if (kBufNumMax < 0) { // No buffer limit
+			bufnode_ = new WriteBuffer(depth);
+			buf_flag = true;
+		} else {
+			// The # of buffer depends on the # of segment.
+			if (bufferRate > 0) {
+				requiredBufNum = bufferRate * curSegnumNum;
+			} else {
+				requiredBufNum = kBufNumMax;
+			}
+
+			uint32_t tmp = bufnum.load(std::memory_order_relaxed);
+			if (tmp < requiredBufNum) {
+				uint32_t BN = bufnum.fetch_add(1, std::memory_order_relaxed);
+				if (BN < requiredBufNum) { 
+					// printf("Avaliable buffer : %lu \n", BN);
+					bufnode_ = new WriteBuffer(depth);
+					buf_flag = true;
+				}
 			}
 		}
 		
