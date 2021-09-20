@@ -31,7 +31,7 @@ using GFLAGS_NAMESPACE::SetUsageMessage;
 
 DEFINE_int32 (initsize, 16, "initial capacity in million");
 DEFINE_string (filepath, "/mnt/pmem0/objpool.data", "");
-// DEFINE_string (filepath1, "/mnt/pmem1/objpool.data", "");
+DEFINE_uint32 (ins_num, 1, "Number of CCEH instance");
 DEFINE_uint32 (batch, 1000000, "report batch");
 DEFINE_uint32 (readtime, 0, "if 0, then we read all keys");
 DEFINE_uint32 (thread, 1, "");
@@ -43,7 +43,8 @@ DEFINE_uint64 (read, 0, "Number of read operations");
 DEFINE_uint64 (write, 1 * 1000000, "Number of read operations");
 DEFINE_bool (hist, false, "");
 DEFINE_string (benchmarks, "load,readall", "");
-DEFINE_uint32 (writeThreads, 1, "For readwhilewriting, determine how many write threads out of 16 threads.");
+DEFINE_uint32 (writeThreads, 1,
+               "For readwhilewriting, determine how many write threads out of 16 threads.");
 
 namespace {
 
@@ -97,8 +98,7 @@ public:
     }
 
     void Stop () {
-        
-        finish_ = !real_finish_? NowMicros():real_finish_;
+        finish_ = !real_finish_ ? NowMicros () : real_finish_;
         seconds_ = (finish_ - start_) * 1e-6;
     }
 
@@ -364,11 +364,31 @@ public:
         D_RW (hashtable_)->initCCEH (pop_, initialSize);
     }
 
+    Benchmark (uint32_t ins_num)
+        : num_ (FLAGS_num),
+          value_size_ (FLAGS_value_size),
+          reads_ (FLAGS_read),
+          writes_ (FLAGS_write),
+          key_trace_ (nullptr),
+          hashtable_ (OID_NULL) {
+        remove (FLAGS_filepath.c_str ());  // delete the mapped file.
+        pop_ = pmemobj_create (FLAGS_filepath.c_str (), "CCEH", POOL_SIZE, 0666);
+        if (!pop_) {
+            perror ("pmemoj_create");
+            exit (1);
+        }
+
+        const size_t initialSize = 1024 * FLAGS_initsize;  // 16 million initial
+        // const size_t initialSize = 4;
+        hashtable_ = POBJ_ROOT (pop_, CCEH);
+        D_RW (hashtable_)->initCCEH (pop_, initialSize);
+    }
+
     ~Benchmark () {}
 
     void Run () {
         trace_size_ = FLAGS_num;
-        key_trace_ = new RandomKeyTrace (trace_size_); // a 1 dim trace_size_ long vector
+        key_trace_ = new RandomKeyTrace (trace_size_);  // a 1 dim trace_size_ long vector
         if (reads_ == 0) {
             reads_ = key_trace_->count_;
             FLAGS_read = key_trace_->count_;
@@ -592,7 +612,7 @@ public:
 
         // Only one of the thread is writing
         if (thread->tid > FLAGS_writeThreads - 1) {
-            DoRead(thread);
+            DoRead (thread);
         } else {
             while (true) {
                 // exclusive access
@@ -606,20 +626,19 @@ public:
             // Special thread that keeps writing until other threads are done.
             size_t interval = num_ / (FLAGS_writeThreads);
             size_t start_offset = thread->tid * interval;
-            auto key_iterator = key_trace_->iterate_between(start_offset, start_offset + interval);
+            auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
 
-            thread->stats.Start();
-            while (key_iterator.Valid()) {
+            thread->stats.Start ();
+            while (key_iterator.Valid ()) {
                 uint64_t j = 0;
-                for (; j < batch && key_iterator.Valid(); j++) {
-                    size_t ikey = key_iterator.Next();
-                    D_RW(hashtable_)->Insert(pop_, ikey, reinterpret_cast<Value_t> (ikey));
+                for (; j < batch && key_iterator.Valid (); j++) {
+                    size_t ikey = key_iterator.Next ();
+                    D_RW (hashtable_)->Insert (pop_, ikey, reinterpret_cast<Value_t> (ikey));
                 }
                 // Do not count any of the preceding work/delay in stats.
-                thread->stats.FinishedBatchOp(j);
+                thread->stats.FinishedBatchOp (j);
             }
         }
-
     }
 
     void DoReadNonLat (ThreadState* thread) {
@@ -671,24 +690,26 @@ public:
                 size_t ikey = key_iterator.Next ();
                 D_RW (hashtable_)->Insert (pop_, ikey, reinterpret_cast<Value_t> (ikey));
             }
-            // printf("load factor : %2.2f \n", D_RW (hashtable_)->buffer_kvs/ D_RW (hashtable_)->buffer_writes);
+            // printf("load factor : %2.2f \n", D_RW (hashtable_)->buffer_kvs/ D_RW
+            // (hashtable_)->buffer_writes);
 
             thread->stats.FinishedBatchOp (j);
         }
-        
-        thread->stats.real_finish_ = NowMicros();
 
-        // printf("thread->shared->num_done = %d, thread->shared->num_initialized = %d \n", thread->shared->num_done == thread->shared->num_initialized);
-        // while (thread->shared->num_done < thread->shared->num_initialized) {
-            // TODO: 
-            // printf("Average Load Factor : %2.2f \n", alf);
+        thread->stats.real_finish_ = NowMicros ();
+
+        // printf("thread->shared->num_done = %d, thread->shared->num_initialized = %d \n",
+        // thread->shared->num_done == thread->shared->num_initialized); while
+        // (thread->shared->num_done < thread->shared->num_initialized) {
+        // TODO:
+        // printf("Average Load Factor : %2.2f \n", alf);
         // }
-        sleep(3);
-        if (thread->tid == 0){
+        sleep (3);
+        if (thread->tid == 0) {
             // double alf = D_RW (hashtable_)->AverageBufLoadFactor();
             // printf("Average Load Factor : %2.2f \n", alf);
 
-            D_RW (hashtable_)->checkBufferData();
+            D_RW (hashtable_)->checkBufferData ();
         }
         return;
     }
@@ -713,25 +734,24 @@ public:
                 size_t ikey = key_iterator.Next ();
                 D_RW (hashtable_)->Insert (pop_, ikey, reinterpret_cast<Value_t> (ikey));
                 if (inserted % 6000000 == 0) {
-                    printf("current ops: %lu ", inserted);
-                    D_RW (hashtable_)->checkBufferData();
+                    printf ("current ops: %lu ", inserted);
+                    D_RW (hashtable_)->checkBufferData ();
                 }
             }
             thread->stats.FinishedBatchOp (j);
         }
-        
-        thread->stats.real_finish_ = NowMicros();
 
-        sleep(3);
-        if (thread->tid == 0){
+        thread->stats.real_finish_ = NowMicros ();
+
+        sleep (3);
+        if (thread->tid == 0) {
             // double alf = D_RW (hashtable_)->AverageBufLoadFactor();
             // printf("Average Load Factor : %2.2f \n", alf);
 
-            D_RW (hashtable_)->checkBufferData();
+            D_RW (hashtable_)->checkBufferData ();
         }
         return;
     }
-    
 
     void DoWriteLat (ThreadState* thread) {
         if (key_trace_ == nullptr) {
@@ -1111,7 +1131,12 @@ int main (int argc, char* argv[]) {
     int sds_write_value = 0;
     pmemobj_ctl_set (NULL, "sds.at_create", &sds_write_value);
 
-    Benchmark benchmark;
-    benchmark.Run ();
+    if (1 == FLAGS_ins_num) {
+        Benchmark benchmark;
+        benchmark.Run ();
+    } else {
+        Benchmark benchmark (FLAGS_ins_num);
+        benchmark.Run ();
+    }
     return 0;
 }
