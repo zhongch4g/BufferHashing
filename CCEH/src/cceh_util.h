@@ -1,46 +1,45 @@
 #pragma once
 
-#include <string>
 #include <assert.h>
 #include <cstring>
+#include <string>
 
-#include <vector>
 #include <algorithm>
 #include <fstream>
 #include <random>
 #include <regex>
+#include <vector>
 
-
-std::string Execute(const std::string& cmd) {
+std::string Execute (const std::string& cmd) {
     std::array<char, 128> buffer;
     std::string result;
-    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
+    std::unique_ptr<FILE, decltype (&pclose)> pipe (popen (cmd.c_str (), "r"), pclose);
     if (!pipe) {
-        throw std::runtime_error("popen() failed!");
+        throw std::runtime_error ("popen() failed!");
     }
-    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
-        result += buffer.data();
+    while (fgets (buffer.data (), buffer.size (), pipe.get ()) != nullptr) {
+        result += buffer.data ();
     }
     return result;
 }
 
 // Returns the number of micro-seconds since some fixed point in time. Only
 // useful for computing deltas of time.
-inline uint64_t NowMicros() {
-static constexpr uint64_t kUsecondsPerSecond = 1000000;
-struct ::timeval tv;
-::gettimeofday(&tv, nullptr);
-return static_cast<uint64_t>(tv.tv_sec) * kUsecondsPerSecond + tv.tv_usec;
+inline uint64_t NowMicros () {
+    static constexpr uint64_t kUsecondsPerSecond = 1000000;
+    struct ::timeval tv;
+    ::gettimeofday (&tv, nullptr);
+    return static_cast<uint64_t> (tv.tv_sec) * kUsecondsPerSecond + tv.tv_usec;
 }
 // Returns the number of nano-seconds since some fixed point in time. Only
 // useful for computing deltas of time in one run.
 // Default implementation simply relies on NowMicros.
 // In platform-specific implementations, NowNanos() should return time points
 // that are MONOTONIC.
-inline uint64_t NowNanos() {
+inline uint64_t NowNanos () {
     struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return static_cast<uint64_t>(ts.tv_sec) * 1000000000L + ts.tv_nsec;
+    clock_gettime (CLOCK_MONOTONIC, &ts);
+    return static_cast<uint64_t> (ts.tv_sec) * 1000000000L + ts.tv_nsec;
 }
 
 enum {
@@ -210,8 +209,7 @@ public:
             "*SUMSUM* | DIMM-R: %7.1f MB| User-R: %7.1f MB   | DIMM-W: %7.1f "
             "MB | "
             "User-W: %7.1f MB | Time: %6.2fs\n",
-            media_read_size_MB , imc_read_size_MB, media_write_size_MB,
-            imc_write_size_MB , seconds);
+            media_read_size_MB, imc_read_size_MB, media_write_size_MB, imc_write_size_MB, seconds);
 
         delete start;
         delete end;
@@ -222,61 +220,55 @@ public:
 
 /** Slice
  *  @note: Derived from LevelDB. the data is stored in the *data_
-*/
+ */
 class Slice {
 public:
     using type = Slice;
     // operator <
-    bool operator < (const Slice& b) const {
-        return compare(b) < 0 ;
-    }
+    bool operator< (const Slice& b) const { return compare (b) < 0; }
 
-    bool operator > (const Slice& b) const {
-        return compare(b) > 0 ;
-    }
+    bool operator> (const Slice& b) const { return compare (b) > 0; }
 
     // explicit conversion
-    inline operator std::string() const {
-        return std::string(data_, size_);
-    }
+    inline operator std::string () const { return std::string (data_, size_); }
 
     // Create an empty slice.
-    Slice() : data_(""), size_(0) { }
+    Slice () : data_ (""), size_ (0) {}
 
     // Create a slice that refers to d[0,n-1].
-    Slice(const char* d, size_t n) : data_(d), size_(n) { }
+    Slice (const char* d, size_t n) : data_ (d), size_ (n) {}
 
     // Create a slice that refers to the contents of "s"
-    Slice(const std::string& s) : data_(s.data()), size_(s.size()) { }
+    Slice (const std::string& s) : data_ (s.data ()), size_ (s.size ()) {}
 
     // Create a slice that refers to s[0,strlen(s)-1]
-    Slice(const char* s) : 
-        data_(s), 
-        size_((s == nullptr) ? 0 : strlen(s)) {
-    }
+    Slice (const char* s) : data_ (s), size_ ((s == nullptr) ? 0 : strlen (s)) {}
 
     // Return a pointer to the beginning of the referenced data
-    inline const char* data() const { return data_; }
+    inline const char* data () const { return data_; }
 
     // Return the length (in bytes) of the referenced data
-    inline size_t size() const { return size_; }
+    inline size_t size () const { return size_; }
 
     // Return true iff the length of the referenced data is zero
-    inline bool empty() const { return size_ == 0; }
+    inline bool empty () const { return size_ == 0; }
 
     // Return the ith byte in the referenced data.
     // REQUIRES: n < size()
-    inline char operator[](size_t n) const {
-        assert(n < size());
+    inline char operator[] (size_t n) const {
+        assert (n < size ());
         return data_[n];
     }
 
     // Change this slice to refer to an empty array
-    inline void clear() { data_ = ""; size_ = 0; }
+    inline void clear () {
+        data_ = "";
+        size_ = 0;
+    }
 
-    inline std::string ToString() const {
+    inline std::string ToString () const {
         std::string res;
-        res.assign(data_, size_);
+        res.assign (data_, size_);
         return res;
     }
 
@@ -284,71 +276,63 @@ public:
     //   <  0 iff "*this" <  "b",
     //   == 0 iff "*this" == "b",
     //   >  0 iff "*this" >  "b"
-    inline int compare(const Slice& b) const {
-        assert(data_ != nullptr && b.data_ != nullptr);
+    inline int compare (const Slice& b) const {
+        assert (data_ != nullptr && b.data_ != nullptr);
         const size_t min_len = (size_ < b.size_) ? size_ : b.size_;
-        int r = memcmp(data_, b.data_, min_len);
+        int r = memcmp (data_, b.data_, min_len);
         if (r == 0) {
-            if (size_ < b.size_) r = -1;
-            else if (size_ > b.size_) r = +1;
+            if (size_ < b.size_)
+                r = -1;
+            else if (size_ > b.size_)
+                r = +1;
         }
         return r;
     }
 
-    friend std::ostream& operator<<(std::ostream& os, const Slice& str) {
-        os <<  str.ToString();
+    friend std::ostream& operator<< (std::ostream& os, const Slice& str) {
+        os << str.ToString ();
         return os;
     }
 
     const char* data_;
     size_t size_;
-}; // end of class Slice
+};  // end of class Slice
 
-inline bool operator==(const Slice& x, const Slice& y) {
-    return ((x.size() == y.size()) &&
-            (memcmp(x.data(), y.data(), x.size()) == 0));
+inline bool operator== (const Slice& x, const Slice& y) {
+    return ((x.size () == y.size ()) && (memcmp (x.data (), y.data (), x.size ()) == 0));
 }
 
-inline bool operator!=(const Slice& x, const Slice& y) {
-    return !(x == y);
-}
+inline bool operator!= (const Slice& x, const Slice& y) { return !(x == y); }
 
-auto rng = std::default_random_engine {};
+auto rng = std::default_random_engine{};
 
 class RandomKeyTrace {
 public:
-    RandomKeyTrace(size_t count, int seed = random()) {
+    RandomKeyTrace (size_t count, int seed = random ()) {
         count_ = count;
-        keys_.resize(count);
+        keys_.resize (count);
         for (size_t i = 0; i < count; i++) {
             keys_[i] = i;
         }
-        Randomize();
+        Randomize ();
     }
 
-    ~RandomKeyTrace() {
+    ~RandomKeyTrace () {}
+
+    void Randomize (void) {
+        printf ("Randomize the trace...\r");
+        fflush (nullptr);
+        std::shuffle (std::begin (keys_), std::end (keys_), rng);
     }
 
-    void Randomize(void) {
-        printf("Randomize the trace...\r");
-        fflush(nullptr);
-        std::shuffle(std::begin(keys_), std::end(keys_), rng);
-    }
-    
     class RangeIterator {
     public:
-        RangeIterator(std::vector<size_t>* pkey_vec, size_t start, size_t end):
-            pkey_vec_(pkey_vec),                        
-            end_index_(end), 
-            cur_index_(start) { }
+        RangeIterator (std::vector<size_t>* pkey_vec, size_t start, size_t end)
+            : pkey_vec_ (pkey_vec), end_index_ (end), cur_index_ (start) {}
 
-        inline bool Valid() {
-            return (cur_index_ < end_index_);
-        }
+        inline bool Valid () { return (cur_index_ < end_index_); }
 
-        inline size_t Next() {
-            return (*pkey_vec_)[cur_index_++];
-        }
+        inline size_t Next () { return (*pkey_vec_)[cur_index_++]; }
 
         std::vector<size_t>* pkey_vec_;
         size_t end_index_;
@@ -357,23 +341,18 @@ public:
 
     class Iterator {
     public:
-        Iterator(std::vector<size_t>* pkey_vec, size_t start_index, size_t range):
-            pkey_vec_(pkey_vec),
-            range_(range),                        
-            end_index_(start_index % range_), 
-            cur_index_(start_index % range_),
-            begin_(true)  
-        {
-            
-        }
+        Iterator (std::vector<size_t>* pkey_vec, size_t start_index, size_t range)
+            : pkey_vec_ (pkey_vec),
+              range_ (range),
+              end_index_ (start_index % range_),
+              cur_index_ (start_index % range_),
+              begin_ (true) {}
 
-        Iterator(){}
+        Iterator () {}
 
-        inline bool Valid() {
-            return (begin_ || cur_index_ != end_index_);
-        }
+        inline bool Valid () { return (begin_ || cur_index_ != end_index_); }
 
-        inline size_t Next() {
+        inline size_t Next () {
             begin_ = false;
             size_t index = cur_index_;
             cur_index_++;
@@ -383,9 +362,10 @@ public:
             return (*pkey_vec_)[index];
         }
 
-        std::string Info() {
+        std::string Info () {
             char buffer[128];
-            sprintf(buffer, "valid: %s, cur i: %lu, end_i: %lu, range: %lu", Valid() ? "true" : "false", cur_index_, end_index_, range_);
+            sprintf (buffer, "valid: %s, cur i: %lu, end_i: %lu, range: %lu",
+                     Valid () ? "true" : "false", cur_index_, end_index_, range_);
             return buffer;
         }
 
@@ -393,34 +373,30 @@ public:
         size_t range_;
         size_t end_index_;
         size_t cur_index_;
-        bool   begin_;
+        bool begin_;
     };
 
-    Iterator trace_at(size_t start_index, size_t range) {
-        return Iterator(&keys_, start_index, range);
+    Iterator trace_at (size_t start_index, size_t range) {
+        return Iterator (&keys_, start_index, range);
     }
 
-    RangeIterator Begin(void) {
-        return RangeIterator(&keys_, 0, keys_.size());
-    }
+    RangeIterator Begin (void) { return RangeIterator (&keys_, 0, keys_.size ()); }
 
-    RangeIterator iterate_between(size_t start, size_t end) {
-        return RangeIterator(&keys_, start, end);
+    RangeIterator iterate_between (size_t start, size_t end) {
+        return RangeIterator (&keys_, start, end);
     }
 
     size_t count_;
     std::vector<size_t> keys_;
 };
 
+enum YCSBOpType { kYCSB_Write, kYCSB_Read, kYCSB_Query, kYCSB_ReadModifyWrite };
 
-
-enum YCSBOpType {kYCSB_Write, kYCSB_Read, kYCSB_Query, kYCSB_ReadModifyWrite};
-
-inline uint32_t wyhash32() {
-    static thread_local uint32_t wyhash32_x = random();
+inline uint32_t wyhash32 () {
+    static thread_local uint32_t wyhash32_x = random ();
     wyhash32_x += 0x60bee2bee120fc15;
     uint64_t tmp;
-    tmp = (uint64_t) wyhash32_x * 0xa3b195354a39b70d;
+    tmp = (uint64_t)wyhash32_x * 0xa3b195354a39b70d;
     uint32_t m1 = (tmp >> 32) ^ tmp;
     tmp = (uint64_t)m1 * 0x1b03738712fad5c9;
     uint32_t m2 = (tmp >> 32) ^ tmp;
@@ -429,13 +405,12 @@ inline uint32_t wyhash32() {
 
 class YCSBGenerator {
 public:
-    // Generate 
-    YCSBGenerator() {
-    }
+    // Generate
+    YCSBGenerator () {}
 
-    inline YCSBOpType NextA() {
+    inline YCSBOpType NextA () {
         // ycsba: 50% reads, 50% writes
-        uint32_t rnd_num = wyhash32();
+        uint32_t rnd_num = wyhash32 ();
 
         if ((rnd_num & 0x1) == 0) {
             return kYCSB_Read;
@@ -444,10 +419,10 @@ public:
         }
     }
 
-    inline YCSBOpType NextB() {
+    inline YCSBOpType NextB () {
         // ycsbb: 95% reads, 5% writes
         // 51/1024 = 0.0498
-        uint32_t rnd_num = wyhash32();
+        uint32_t rnd_num = wyhash32 ();
 
         if ((rnd_num & 1023) < 51) {
             return kYCSB_Write;
@@ -456,23 +431,33 @@ public:
         }
     }
 
-    inline YCSBOpType NextC() {
-        return kYCSB_Read;
-    }
+    inline YCSBOpType NextC () { return kYCSB_Read; }
 
-    inline YCSBOpType NextD() {
+    inline YCSBOpType NextD () {
         // ycsbd: read latest inserted records
         return kYCSB_Read;
     }
 
-    inline YCSBOpType NextF() {
+    inline YCSBOpType NextF () {
         // ycsba: 50% reads, 50% writes
-        uint32_t rnd_num = wyhash32();
+        uint32_t rnd_num = wyhash32 ();
 
         if ((rnd_num & 0x1) == 0) {
             return kYCSB_Read;
         } else {
             return kYCSB_ReadModifyWrite;
+        }
+    }
+
+    inline YCSBOpType NextG () {
+        // ycsbb: 5% reads, 95% writes
+        // 51/1024 = 0.0498
+        uint32_t rnd_num = wyhash32 ();
+
+        if ((rnd_num & 1023) < 51) {
+            return kYCSB_Read;
+        } else {
+            return kYCSB_Write;
         }
     }
 };

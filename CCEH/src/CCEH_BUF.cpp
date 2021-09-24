@@ -15,7 +15,7 @@
 //#define f_seed 0xc70f6907UL
 //#define s_seed 0xc70f6907UL
 
-#define INPLACE
+// #define INPLACE
 // #define WITHOUT_FLUSH
 #define CONFIG_OUT_OF_PLACE_MERGE
 
@@ -26,6 +26,70 @@ std::atomic<uint32_t> bufnum (0);
 std::atomic<uint32_t> curSegnumNum (0);
 
 using namespace std;
+
+void Segment::initSegment (CCEH* _cceh) {
+    for (int i = 0; i < kNumSlot; ++i) {
+        bucket[i].key = INVALID;
+    }
+    local_depth = 0;
+    sema = 0;
+
+    int32_t requiredBufNum;
+
+    if (cceh->bufferConfig.getKBufNumMax () < 0) {
+        bufnode_ = new WriteBuffer ();
+        buf_flag = true;
+    } else {
+        // The # of buffer depends on the # of segment.
+        if (cceh->bufferConfig.getBufferRate () > 0) {
+            requiredBufNum = cceh->bufferConfig.getBufferRate () * curSegnumNum;
+        } else {
+            requiredBufNum = cceh->bufferConfig.getKBufNumMax ();
+        }
+
+        int32_t tmp = bufnum.load (std::memory_order_relaxed);
+        if (tmp < requiredBufNum) {
+            int32_t BN = bufnum.fetch_add (1, std::memory_order_relaxed);
+            if (BN < requiredBufNum) {
+                // printf("Avaliable buffer : %lu \n", BN);
+                bufnode_ = new WriteBuffer ();
+                buf_flag = true;
+            }
+        }
+    }
+}
+
+void Segment::initSegment (size_t depth, CCEH* _cceh) {
+    for (int i = 0; i < kNumSlot; ++i) {
+        bucket[i].key = INVALID;
+    }
+    local_depth = depth;
+    sema = 0;
+
+    int32_t requiredBufNum;
+    cceh = _cceh;
+    if (cceh->bufferConfig.getKBufNumMax () < 0) {
+        bufnode_ = new WriteBuffer (depth);
+        buf_flag = true;
+    } else {
+        // The # of buffer depends on the # of segment.
+        if (cceh->bufferConfig.getBufferRate () > 0) {
+            requiredBufNum = cceh->bufferConfig.getBufferRate () * curSegnumNum;
+        } else {
+            requiredBufNum = cceh->bufferConfig.getKBufNumMax ();
+        }
+
+        int32_t tmp = bufnum.load (std::memory_order_relaxed);
+        if (tmp < requiredBufNum) {
+            int32_t BN = bufnum.fetch_add (1, std::memory_order_relaxed);
+            if (BN < requiredBufNum) {
+                // printf("Avaliable buffer : %lu \n", BN);
+                bufnode_ = new WriteBuffer (depth);
+                buf_flag = true;
+            }
+        }
+    }
+}
 
 void Segment::execute_path (PMEMobjpool* pop, vector<pair<size_t, size_t>>& path, Key_t& key,
                             Value_t value) {
@@ -111,7 +175,7 @@ bool Segment::Insert4split (Key_t& key, Value_t value, size_t loc) {
 // TODO:Segment in dram Split
 Segment* Segment::SplitDram (WriteBuffer::Iterator& iter) {
     Segment* split = new Segment ();
-    split->initSegment (local_depth + 1);
+    split->initSegment (local_depth + 1, cceh);
     // printf("Split Dram \n");
     // local depth increase 1 after split! Move the KV to new segment according to pattern
     auto pattern = ((size_t)1 << (sizeof (Key_t) * 8 - local_depth - 1));
@@ -200,13 +264,13 @@ RETRY:
     }
 
     char* val;
-    auto res = D_RW (target)->bufnode_->Get (key, val);
-    // printf("Valid Get = %d , key = %d, val = %s \n", res, key, val);
-    if (res) {
-        return Value_t (val);
-    } else {
-        return get (key);
+    auto target_ptr = D_RW (target);
+    if (target_ptr->buf_flag) {
+        auto res = target_ptr->bufnode_->Get (key, val);
+        if (res) return Value_t (val);
     }
+
+    return get (key);
 }
 
 Value_t CCEH::get (Key_t& key) {
@@ -281,7 +345,7 @@ TOID (struct Segment) * Segment::Split (PMEMobjpool* pop) {
     split[0] = pmemobj_oid (this);
 
     POBJ_ALLOC (pop, &split[1], struct Segment, sizeof (struct Segment), NULL, NULL);
-    D_RW (split[1])->initSegment (local_depth + 1);
+    D_RW (split[1])->initSegment (local_depth + 1, cceh);
 
     auto pattern = ((size_t)1 << (sizeof (Key_t) * 8 - local_depth - 1));
 
@@ -305,8 +369,8 @@ TOID (struct Segment) * Segment::Split (PMEMobjpool* pop) {
     TOID (struct Segment)* split = new TOID (struct Segment)[2];
     POBJ_ALLOC (pop, &split[0], struct Segment, sizeof (struct Segment), NULL, NULL);
     POBJ_ALLOC (pop, &split[1], struct Segment, sizeof (struct Segment), NULL, NULL);
-    D_RW (split[0])->initSegment (local_depth + 1);
-    D_RW (split[1])->initSegment (local_depth + 1);
+    D_RW (split[0])->initSegment (local_depth + 1, cceh);
+    D_RW (split[1])->initSegment (local_depth + 1, cceh);
 
     auto pattern = ((size_t)1 << (sizeof (Key_t) * 8 - local_depth - 1));
     for (int i = 0; i < kNumSlot; ++i) {
@@ -340,7 +404,7 @@ void CCEH::initCCEH (PMEMobjpool* pop) {
         // allocate space for all segment
         POBJ_ALLOC (pop, &D_RO (D_RO (dir)->segment)[i], struct Segment, sizeof (struct Segment),
                     NULL, NULL);
-        D_RW (D_RW (D_RW (dir)->segment)[i])->initSegment ();
+        D_RW (D_RW (D_RW (dir)->segment)[i])->initSegment (this);
         // add the # of segment
         curSegnumNum.fetch_add (1, std::memory_order_relaxed);
     }
@@ -359,7 +423,35 @@ void CCEH::initCCEH (PMEMobjpool* pop, size_t initCap) {
     for (int i = 0; i < D_RO (dir)->capacity; ++i) {
         POBJ_ALLOC (pop, &D_RO (D_RO (dir)->segment)[i], struct Segment, sizeof (struct Segment),
                     NULL, NULL);
-        D_RW (D_RW (D_RW (dir)->segment)[i])->initSegment (static_cast<size_t> (log2 (initCap)));
+        D_RW (D_RW (D_RW (dir)->segment)[i])
+            ->initSegment (static_cast<size_t> (log2 (initCap)), this);
+        // add the # of segment
+        curSegnumNum.fetch_add (1, std::memory_order_relaxed);
+    }
+    // printf("Finished the initialize of the CCEH. \n");
+    buffer_writes = 0;
+    buffer_kvs = 0;
+}
+
+void CCEH::initCCEH (PMEMobjpool* pop, size_t initCap, uint32_t bufferSizeFactor,
+                     uint32_t kBufNumMax, double bufferRate) {
+    bufferConfig.setBufferSizeFactor (bufferSizeFactor);
+    bufferConfig.setKBufNumMax (kBufNumMax);
+    bufferConfig.setBufferRate (bufferRate);
+    printf ("initCCEH : %d, %d, %2.2f \n", bufferConfig.getKBufNumMax (),
+            bufferConfig.getBufferSizeFactor (), bufferConfig.getBufferRate ());
+
+    crashed = true;
+    POBJ_ALLOC (pop, &dir, struct Directory, sizeof (struct Directory), NULL, NULL);
+    D_RW (dir)->initDirectory (static_cast<size_t> (log2 (initCap)));  // log2 (16*1024) = 14
+    POBJ_ALLOC (pop, &D_RW (dir)->segment, TOID (struct Segment),
+                sizeof (TOID (struct Segment)) * D_RO (dir)->capacity, NULL, NULL);
+
+    for (int i = 0; i < D_RO (dir)->capacity; ++i) {
+        POBJ_ALLOC (pop, &D_RO (D_RO (dir)->segment)[i], struct Segment, sizeof (struct Segment),
+                    NULL, NULL);
+        D_RW (D_RW (D_RW (dir)->segment)[i])
+            ->initSegment (static_cast<size_t> (log2 (initCap)), this);
         // add the # of segment
         curSegnumNum.fetch_add (1, std::memory_order_relaxed);
     }
@@ -409,6 +501,8 @@ void CCEH::checkBufferData () {
     // curSegnumNum.load()); printf("# of segments : %lu, # of buffers : %lu\n", segmentcnt,
     // curSegnumNum.load());
     printf ("# of segments : %lu, # of buffers : %lu\n", segmentcnt, bufcnt);
+    printf ("%d, %d, %2.2f \n", bufferConfig.getKBufNumMax (), bufferConfig.getBufferSizeFactor (),
+            bufferConfig.getBufferRate ());
 }
 
 void CCEH::Insert (PMEMobjpool* pop, Key_t& key, Value_t value) {

@@ -14,9 +14,9 @@
 
 #define TOID_ARRAY(x) TOID (x)
 // 16K / BUFFER_SIZE_FACTOR = BUFFER_SIZE
-#define BUFFER_SIZE_FACTOR 4
-#define kBufNumMax 1
-#define bufferRate 0.7
+// #define BUFFER_SIZE_FACTOR 4
+// #define kBufNumMax 1
+// #define bufferRate 0.7
 
 typedef size_t Key_t;
 typedef const char* Value_t;
@@ -41,27 +41,44 @@ POBJ_LAYOUT_ROOT (HashTable, struct Segment);    // to define a root object
 POBJ_LAYOUT_TOID (HashTable, TOID (struct Segment));
 POBJ_LAYOUT_END (HashTable);
 
+// to limit the number of buffer in use
+extern std::atomic<uint32_t> bufnum;
+extern std::atomic<uint32_t> curSegnumNum;
+
 constexpr size_t kSegmentBits = 8;
 constexpr size_t kMask = (1 << kSegmentBits) - 1;
 constexpr size_t kShift = kSegmentBits;
 constexpr size_t kSegmentSize =
     (1 << kSegmentBits) * 16 * 4;  // 16 Bytes * 4 /per Bucket, 1 << kSegmentBits = 256 Buckets
 // constexpr size_t kWriteBufferSize = kSegmentSize / 2 / 256;
-constexpr size_t kWriteBufferSize =
-    (kSegmentSize / BUFFER_SIZE_FACTOR / 256) * (1 + 0.3);  // 4K buffer size
+constexpr size_t kWriteBufferSize = (kSegmentSize / 4 / 256) * (1 + 0.3);  // 4K buffer size
 constexpr size_t kNumPairPerCacheLine = 4;
 constexpr size_t kNumCacheLine = 8;  // how many cachelines for linearprobing to search
 constexpr size_t kCuckooThreshold = 16;
 // constexpr size_t kCuckooThreshold = 32;
 
-// buflog::WriteBuffer<16> *writeBuffer_;
-
 // The way to use the class with template
 using WriteBuffer = buflog::WriteBuffer<kWriteBufferSize>;
 
-// to limit the number of buffer in use
-extern std::atomic<uint32_t> bufnum;
-extern std::atomic<uint32_t> curSegnumNum;
+class BufferConfig {
+public:
+    BufferConfig () {}
+
+    ~BufferConfig (void) {}
+
+    void setBufferSizeFactor (int32_t bufferSizeFactor) { bufferSizeFactor_ = bufferSizeFactor; }
+    void setKBufNumMax (int32_t kBufNumMax) { kBufNumMax_ = kBufNumMax; }
+    void setBufferRate (double bufferRate) { bufferRate_ = bufferRate; }
+
+    int32_t getBufferSizeFactor () { return bufferSizeFactor_; }
+    int32_t getKBufNumMax () { return kBufNumMax_; }
+    double getBufferRate () { return bufferRate_; }
+
+private:
+    int32_t bufferSizeFactor_;
+    int32_t kBufNumMax_;
+    double bufferRate_;
+};
 
 struct Segment {
     // the maximum number of kv pair in Segment
@@ -70,69 +87,8 @@ struct Segment {
     Segment (void) {}
     ~Segment (void) {}
 
-    void initSegment (void) {
-        for (int i = 0; i < kNumSlot; ++i) {
-            bucket[i].key = INVALID;
-        }
-        local_depth = 0;
-        sema = 0;
-
-        uint32_t requiredBufNum;
-
-        if (kBufNumMax < 0) {
-            bufnode_ = new WriteBuffer ();
-            buf_flag = true;
-        } else {
-            // The # of buffer depends on the # of segment.
-            if (bufferRate > 0) {
-                requiredBufNum = bufferRate * curSegnumNum;
-            } else {
-                requiredBufNum = kBufNumMax;
-            }
-
-            uint32_t tmp = bufnum.load (std::memory_order_relaxed);
-            if (tmp < requiredBufNum) {
-                uint32_t BN = bufnum.fetch_add (1, std::memory_order_relaxed);
-                if (BN < requiredBufNum) {
-                    // printf("Avaliable buffer : %lu \n", BN);
-                    bufnode_ = new WriteBuffer ();
-                    buf_flag = true;
-                }
-            }
-        }
-    }
-
-    void initSegment (size_t depth) {
-        for (int i = 0; i < kNumSlot; ++i) {
-            bucket[i].key = INVALID;
-        }
-        local_depth = depth;
-        sema = 0;
-
-        uint32_t requiredBufNum;
-
-        if (kBufNumMax < 0) {  // No buffer limit
-            bufnode_ = new WriteBuffer (depth);
-            buf_flag = true;
-        } else {
-            // The # of buffer depends on the # of segment.
-            if (bufferRate > 0) {
-                requiredBufNum = bufferRate * curSegnumNum;
-            } else {
-                requiredBufNum = kBufNumMax;
-            }
-
-            uint32_t tmp = bufnum.load (std::memory_order_relaxed);
-            if (tmp < requiredBufNum) {
-                uint32_t BN = bufnum.fetch_add (1, std::memory_order_relaxed);
-                if (BN < requiredBufNum) {
-                    // printf("Avaliable buffer : %lu \n", BN);
-                    bufnode_ = new WriteBuffer (depth);
-                    buf_flag = true;
-                }
-            }
-        }
-    }
+    void initSegment (CCEH*);
+    void initSegment (size_t, CCEH*);
 
     bool suspend (void) {
         int64_t val;
@@ -180,6 +136,8 @@ struct Segment {
     WriteBuffer* bufnode_;
     // the flag to tell this segment has buffer or not
     bool buf_flag = false;
+
+    CCEH* cceh;
 };
 
 struct Directory {
@@ -243,6 +201,7 @@ public:
     ~CCEH (void) {}
     void initCCEH (PMEMobjpool*);
     void initCCEH (PMEMobjpool*, size_t);
+    void initCCEH (PMEMobjpool*, size_t, uint32_t, uint32_t, double);
 
     /* For CCEH BUF */
     void Insert (PMEMobjpool*, Key_t&, Value_t);
@@ -270,6 +229,8 @@ public:
 
     // check data in segment
     void checkBufferData ();
+
+    BufferConfig bufferConfig;
 
 private:
     TOID (struct Directory) dir;
