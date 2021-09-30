@@ -45,6 +45,8 @@ DEFINE_bool (hist, false, "");
 DEFINE_string (benchmarks, "load,readall", "");
 DEFINE_uint32 (writeThreads, 1,
                "For readwhilewriting, determine how many write threads out of 16 threads.");
+DEFINE_double (bufferRate, 0.1, "");
+DEFINE_int32 (bufferNum, -1, "");
 
 namespace {
 
@@ -109,18 +111,18 @@ public:
         int64_t usecs_since_last = now - last_report_finish_;
 
         std::string cur_time = TimeToString (now / 1000000);
-        // printf (
-        //     "%s ... thread %d: (%lu,%lu) ops and "
-        //     "( %.1f,%.1f ) ops/second in (%.4f,%.4f) seconds\n",
-        //     cur_time.c_str (), tid_, done_ - last_report_done_, done_,
-        //     (done_ - last_report_done_) / (usecs_since_last / 1000000.0),
-        //     done_ / ((now - start_) / 1000000.0), (now - last_report_finish_) / 1000000.0,
-        //     (now - start_) / 1000000.0);
+        printf (
+            "%s ... thread %d: (%lu,%lu) ops and "
+            "( %.1f,%.1f ) ops/second in (%.4f,%.4f) seconds\n",
+            cur_time.c_str (), tid_, done_ - last_report_done_, done_,
+            (done_ - last_report_done_) / (usecs_since_last / 1000000.0),
+            done_ / ((now - start_) / 1000000.0), (now - last_report_finish_) / 1000000.0,
+            (now - start_) / 1000000.0);
 
         // each epoch speed
-        printf ("%d,%lu,%lu,%.4f,%.4f\n", tid_, last_report_done_, done_,
-                usecs_since_last / 1000000.0,
-                (done_ - last_report_done_) / (usecs_since_last / 1000000.0) / 1024 / 1024);
+        // printf ("%d,%lu,%lu,%.4f,%.4f\n", tid_, last_report_done_, done_,
+        //         usecs_since_last / 1000000.0,
+        //         (done_ - last_report_done_) / (usecs_since_last / 1000000.0) / 1024 / 1024);
         last_report_finish_ = now;
         last_report_done_ = done_;
         fflush (stdout);
@@ -374,7 +376,9 @@ public:
         // D_RW (hashtable_)->initCCEH (pop_, initialSize);
         printf ("Single CCEH \n");
         // D_RW (hashtable_)->initCCEH (pop_, initialSize, 4, -1, 0);  // full buffer
-        D_RW (hashtable_)->initCCEH (pop_, initialSize, 4, 1, 0);  // no buffer
+        // D_RW (hashtable_)->initCCEH (pop_, initialSize, 4, 1, 0);  // no buffer
+        // D_RW (hashtable_)->initCCEH (pop_, initialSize, 4, 1, FLAGS_bufferRate);
+        D_RW (hashtable_)->initCCEH (pop_, initialSize, 4, FLAGS_bufferNum, FLAGS_bufferRate);
     }
 
     Benchmark (uint32_t ins_num)
@@ -391,8 +395,8 @@ public:
         std::string file_path2 = "/objpool.data";
         std::string file_path;
         int32_t bufferSizeFactorConfig[] = {4, 4};
-        int32_t kBufNumMaxConfig[] = {1, 1};  // set it to -1 means full of buffer
-        double bufferRateConfig[] = {0, 0};   // kbufnum -1 and rate 0 means no buffer at all
+        int32_t kBufNumMaxConfig[] = {-1, -1};  // set it to -1 means full of buffer
+        double bufferRateConfig[] = {0, 0};     // kbufnum -1 and rate 0 means no buffer at all
 
         for (uint32_t n = 0; n < ins_num_; n++) {
             // the file path here must be start at pmem0 directory: pmem0, pmem1, ..., pmemN
@@ -504,6 +508,10 @@ public:
                 fresh_db = false;
                 key_trace_->Randomize ();
                 method = &Benchmark::YCSBF;
+            } else if (name == "ycsbg") {
+                fresh_db = false;
+                key_trace_->Randomize ();
+                method = &Benchmark::YCSBG;
             } else if (name == "writenwrite") {
                 fresh_db = false;
                 key_trace_->Randomize ();
@@ -512,6 +520,10 @@ public:
                 fresh_db = false;
                 key_trace_->Randomize ();
                 method = &Benchmark::writenread;
+            } else if (name == "readnread") {
+                fresh_db = false;
+                key_trace_->Randomize ();
+                method = &Benchmark::readnread;
             } else if (name == "writenhybridA") {
                 fresh_db = false;
                 key_trace_->Randomize ();
@@ -734,7 +746,7 @@ public:
             }
             // printf("load factor : %2.2f \n", D_RW (hashtable_)->buffer_kvs/ D_RW
             // (hashtable_)->buffer_writes);
-
+            // D_RW (hashtable_)->checkBufferData ();
             thread->stats.FinishedBatchOp (j);
         }
 
@@ -1041,6 +1053,41 @@ public:
         return;
     }
 
+    void YCSBG (ThreadState* thread) {
+        uint64_t batch = FLAGS_batch;
+        if (key_trace_ == nullptr) {
+            perror ("YCSBG lack key_trace_ initialization.");
+            return;
+        }
+        size_t find = 0;
+        size_t insert = 0;
+        size_t interval = num_ / FLAGS_thread;
+        size_t start_offset = thread->tid * interval;
+        auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
+        // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+        //         start_offset + interval);
+        thread->stats.Start ();
+
+        while (key_iterator.Valid ()) {
+            uint64_t j = 0;
+            for (; j < batch && key_iterator.Valid (); j++) {
+                size_t key = key_iterator.Next ();
+                if (thread->ycsb_gen.NextG () == kYCSB_Write) {
+                    D_RW (hashtable_)->Insert (pop_, key, reinterpret_cast<Value_t> (key));
+                    insert++;
+                } else {
+                    auto ret = D_RW (hashtable_)->Get (key);
+                    find++;
+                }
+            }
+            thread->stats.FinishedBatchOp (j);
+        }
+        // char buf[100];
+        // snprintf (buf, sizeof (buf), "(insert: %lu, read: %lu)", insert, find);
+        // thread->stats.AddMessage (buf);
+        return;
+    }
+
     void writenwrite (ThreadState* thread) {
         uint64_t batch = FLAGS_batch;
         if (key_trace_ == nullptr) {
@@ -1117,6 +1164,49 @@ public:
                 if (npolicy == 0) {
                     D_RW (vhashtable_[npolicy])
                         ->Insert (vpop_[npolicy], key, reinterpret_cast<Value_t> (key));
+                } else if (npolicy == 1) {
+                    D_RW (vhashtable_[npolicy])->Get (key);
+                } else {
+                    perror ("threads distribute error . \n");
+                    exit (1);
+                }
+            }
+            thread->stats.FinishedBatchOp (j);
+        }
+        int th = thread->tid;
+        return;
+    }
+
+    void readnread (ThreadState* thread) {
+        uint64_t batch = FLAGS_batch;
+        if (key_trace_ == nullptr) {
+            perror ("write & hybrid key_trace_ initialization.");
+            return;
+        }
+        if (FLAGS_ins_num <= 1) {
+            perror ("instance must larger than 1 \n");
+            exit (1);
+        }
+
+        size_t interval = num_ / (FLAGS_thread);
+        size_t start_offset = (thread->tid) * interval;
+        auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
+        // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+        //         start_offset + interval);
+
+        // how many threads should give to each CCEH
+        uint32_t nthread = FLAGS_thread / FLAGS_ins_num;  // 8
+        Duration duration (FLAGS_readtime, reads_);
+        thread->stats.Start ();
+
+        while (!duration.Done (batch) && key_iterator.Valid ()) {
+            uint64_t j = 0;
+            for (; j < batch && key_iterator.Valid (); j++) {
+                size_t key = key_iterator.Next ();
+
+                uint32_t npolicy = thread->tid / nthread;
+                if (npolicy == 0) {
+                    D_RW (vhashtable_[npolicy])->Get (key);
                 } else if (npolicy == 1) {
                     D_RW (vhashtable_[npolicy])->Get (key);
                 } else {

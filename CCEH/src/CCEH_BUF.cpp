@@ -42,7 +42,8 @@ void Segment::initSegment (CCEH* _cceh) {
     } else {
         // The # of buffer depends on the # of segment.
         if (cceh->bufferConfig.getBufferRate () > 0) {
-            requiredBufNum = cceh->bufferConfig.getBufferRate () * curSegnumNum;
+            requiredBufNum =
+                cceh->bufferConfig.getBufferRate () * curSegnumNum.load (std::memory_order_relaxed);
         } else {
             requiredBufNum = cceh->bufferConfig.getKBufNumMax ();
         }
@@ -69,13 +70,16 @@ void Segment::initSegment (size_t depth, CCEH* _cceh) {
     int32_t requiredBufNum;
     cceh = _cceh;
     if (cceh->bufferConfig.getKBufNumMax () < 0) {
+        // printf ("1\n");
         bufnode_ = new WriteBuffer (depth);
         buf_flag = true;
     } else {
         // The # of buffer depends on the # of segment.
         if (cceh->bufferConfig.getBufferRate () > 0) {
+            // printf ("2\n");
             requiredBufNum = cceh->bufferConfig.getBufferRate () * curSegnumNum;
         } else {
+            // printf ("3\n");
             requiredBufNum = cceh->bufferConfig.getKBufNumMax ();
         }
 
@@ -89,6 +93,14 @@ void Segment::initSegment (size_t depth, CCEH* _cceh) {
             }
         }
     }
+}
+
+void Segment::releaseBuffer () {
+    // 1. find out a segment to release its buffer
+
+    // 2. merge the buffer to segment
+
+    // 3. delete the buffer inside
 }
 
 void Segment::execute_path (PMEMobjpool* pop, vector<pair<size_t, size_t>>& path, Key_t& key,
@@ -438,6 +450,9 @@ void CCEH::initCCEH (PMEMobjpool* pop, size_t initCap, uint32_t bufferSizeFactor
     bufferConfig.setBufferSizeFactor (bufferSizeFactor);
     bufferConfig.setKBufNumMax (kBufNumMax);
     bufferConfig.setBufferRate (bufferRate);
+    // initialize the hash table that store the segment with buffer
+    bufferConfig.initDirEntryMapping (log2 (initCap));
+
     printf ("initCCEH : %d, %d, %2.2f \n", bufferConfig.getKBufNumMax (),
             bufferConfig.getBufferSizeFactor (), bufferConfig.getBufferRate ());
 
@@ -487,22 +502,24 @@ void CCEH::checkBufferData () {
         segmentcnt += 1;
         if (target_ptr->buf_flag) {
             bufcnt += 1;
-            for (size_t j = 0; j < kWriteBufferSize; j++) {
-                key_left += target_ptr->bufnode_->nodes_[j].ValidCount ();
-            }
+            // for (size_t j = 0; j < kWriteBufferSize; j++) {
+            //     key_left += target_ptr->bufnode_->nodes_[j].ValidCount ();
+            // }
         }
 
         int stride = pow (2, D_RO (dir)->depth - D_RO (target)->local_depth);
         i += stride;
     }
-    printf ("# of key left : %lu \n", key_left);
+    // printf ("# of key left : %lu \n", key_left);
 
     // printf("# of segments : %lu, # of buffers : %lu, curSegnumNum = %lu\n", segmentcnt, bufcnt,
     // curSegnumNum.load()); printf("# of segments : %lu, # of buffers : %lu\n", segmentcnt,
     // curSegnumNum.load());
-    printf ("# of segments : %lu, # of buffers : %lu\n", segmentcnt, bufcnt);
-    printf ("%d, %d, %2.2f \n", bufferConfig.getKBufNumMax (), bufferConfig.getBufferSizeFactor (),
-            bufferConfig.getBufferRate ());
+    // printf ("# of segments : %lu, # of buffers : %lu\n", segmentcnt, bufcnt);
+    // printf ("%lu, %lu\n", segmentcnt, bufcnt);
+    // printf ("%d, %d, %2.2f \n", bufferConfig.getKBufNumMax (), bufferConfig.getBufferSizeFactor
+    // (),
+    //         bufferConfig.getBufferRate ());
 }
 
 void CCEH::Insert (PMEMobjpool* pop, Key_t& key, Value_t value) {

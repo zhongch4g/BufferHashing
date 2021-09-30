@@ -30,7 +30,7 @@ using GFLAGS_NAMESPACE::RegisterFlagValidator;
 using GFLAGS_NAMESPACE::SetUsageMessage;
 
 DEFINE_int32 (initsize, 16, "initial capacity in million");
-DEFINE_string (filepath, "/mnt/pmem/objpool.data", "");
+DEFINE_string (filepath, "/mnt/pmem0/objpool.data", "");
 DEFINE_uint32 (batch, 1000000, "report batch");
 DEFINE_uint32 (readtime, 0, "if 0, then we read all keys");
 DEFINE_uint32 (thread, 1, "");
@@ -38,7 +38,7 @@ DEFINE_uint64 (report_interval, 0, "Report interval in seconds");
 DEFINE_uint64 (stats_interval, 10000000, "Report interval in ops");
 DEFINE_uint64 (value_size, 8, "The value size");
 DEFINE_uint64 (num, 1 * 1000000LU, "Number of total record");
-DEFINE_uint64 (read, 1 * 1000000, "Number of read operations");
+DEFINE_uint64 (read, 0, "Number of read operations");
 DEFINE_uint64 (write, 1 * 1000000, "Number of read operations");
 DEFINE_bool (hist, false, "");
 DEFINE_string (benchmarks, "load,readrandom", "");
@@ -104,13 +104,18 @@ public:
         int64_t usecs_since_last = now - last_report_finish_;
 
         std::string cur_time = TimeToString (now / 1000000);
-        printf (
-            "%s ... thread %d: (%lu,%lu) ops and "
-            "( %.1f,%.1f ) ops/second in (%.4f,%.4f) seconds\n",
-            cur_time.c_str (), tid_, done_ - last_report_done_, done_,
-            (done_ - last_report_done_) / (usecs_since_last / 1000000.0),
-            done_ / ((now - start_) / 1000000.0), (now - last_report_finish_) / 1000000.0,
-            (now - start_) / 1000000.0);
+        // printf (
+        //     "%s ... thread %d: (%lu,%lu) ops and "
+        //     "( %.1f,%.1f ) ops/second in (%.4f,%.4f) seconds\n",
+        //     cur_time.c_str (), tid_, done_ - last_report_done_, done_,
+        //     (done_ - last_report_done_) / (usecs_since_last / 1000000.0),
+        //     done_ / ((now - start_) / 1000000.0), (now - last_report_finish_) / 1000000.0,
+        //     (now - start_) / 1000000.0);
+
+        printf ("%d,%lu,%lu,%.4f,%.4f\n", tid_, last_report_done_, done_,
+                usecs_since_last / 1000000.0,
+                (done_ - last_report_done_) / (usecs_since_last / 1000000.0) / 1024 / 1024);
+
         last_report_finish_ = now;
         last_report_done_ = done_;
         fflush (stdout);
@@ -230,9 +235,9 @@ public:
         if (print_hist) {
             fprintf (stdout, "Nanoseconds per op:\n%s\n", hist_.ToString ().c_str ());
         }
-        FILE *fp;
-        fp = fopen("result-CCEH/CCEH.txt","a");
-        fprintf(fp,"%lf\n",throughput / 1024 / 1024);
+        // FILE* fp;
+        // fp = fopen ("result-CCEH/CCEH.txt", "a");
+        // fprintf (fp, "%lf\n", throughput / 1024 / 1024);
 
         fflush (stdout);
         fflush (stderr);
@@ -504,9 +509,9 @@ public:
             thread->stats.FinishedBatchOp (j);
         }
         char buf[100];
-        snprintf (buf, sizeof (buf), "(num: %lu, not find: %lu)", interval, not_find);
-        if (not_find)
-            printf ("thread %2d num: %lu, not find: %lu\n", thread->tid, interval, not_find);
+        // snprintf (buf, sizeof (buf), "(num: %lu, not find: %lu)", interval, not_find);
+        // if (not_find)
+        //     printf ("thread %2d num: %lu, not find: %lu\n", thread->tid, interval, not_find);
         thread->stats.AddMessage (buf);
     }
 
@@ -573,27 +578,25 @@ public:
         }
         // Only one of the thread is writing
         if (thread->tid > 0) {
-            DoRead(thread);
+            DoRead (thread);
         } else {
             uint64_t batch = FLAGS_batch;
             // Special thread that keeps writing until other threads are done.
             size_t interval = num_;
-            auto key_iterator = key_trace_->iterate_between(0, 0 + interval);
+            auto key_iterator = key_trace_->iterate_between (0, 0 + interval);
 
-            thread->stats.Start();
-            while (key_iterator.Valid()) {
+            thread->stats.Start ();
+            while (key_iterator.Valid ()) {
                 uint64_t j = 0;
-                for (; j < batch && key_iterator.Valid(); j++) {
-                    size_t ikey = key_iterator.Next();
-                    D_RW(hashtable_)->Insert(pop_, ikey, reinterpret_cast<Value_t> (ikey));
+                for (; j < batch && key_iterator.Valid (); j++) {
+                    size_t ikey = key_iterator.Next ();
+                    D_RW (hashtable_)->Insert (pop_, ikey, reinterpret_cast<Value_t> (ikey));
                 }
                 // Do not count any of the preceding work/delay in stats.
-                thread->stats.FinishedBatchOp(j);
+                thread->stats.FinishedBatchOp (j);
             }
         }
-
     }
-
 
     void DoReadNonLat (ThreadState* thread) {
         if (key_trace_ == nullptr) {

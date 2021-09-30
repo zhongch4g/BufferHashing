@@ -74,10 +74,53 @@ public:
     int32_t getKBufNumMax () { return kBufNumMax_; }
     double getBufferRate () { return bufferRate_; }
 
+    void initDirEntryMapping (uint64_t initSize) {
+        currentHashCap = initSize;
+        dirEntryMapping = new uint64_t[initSize];
+        memset (dirEntryMapping, 0, initSize * sizeof (uint64_t));
+    }
+    uint64_t getDirEntryMapping () {
+        // return an entry of dir
+        auto randN = rand ();
+        for (uint32_t i = 0; i < probDistance; i++) {
+            auto loc = (randN + i) % currentHashCap;
+            if (dirEntryMapping[loc] != 0) {
+                // TODO : delete ??
+                return loc;
+                ;
+            }
+        }
+    }
+
+    void setDirEntryMapping (uint64_t index) {
+        for (uint32_t i = 0; i < probDistance; i++) {
+            auto loc = (index + i) % currentHashCap;
+            if (dirEntryMapping[loc] == 0) {
+                dirEntryMapping[loc] = index;
+                return;
+            }
+        }
+        // TODO : Collision
+    }
+
+    void removeDirEntryMapping (uint64_t index) {
+        for (uint32_t i = 0; i < probDistance; i++) {
+            auto loc = (index + i) % currentHashCap;
+            if (dirEntryMapping[loc] == index) {
+                dirEntryMapping[loc] = 0;
+                return;
+            }
+        }
+        // Didn't find the index means there is no entry
+    }
+
 private:
     int32_t bufferSizeFactor_;
     int32_t kBufNumMax_;
     double bufferRate_;
+
+    uint64_t currentHashCap;
+    uint64_t* dirEntryMapping;
 };
 
 struct Segment {
@@ -129,6 +172,7 @@ struct Segment {
     void execute_path (PMEMobjpool*, std::vector<std::pair<size_t, size_t>>&, Key_t&, Value_t);
     void execute_path (std::vector<std::pair<size_t, size_t>>&, Pair);
     size_t numElement (void);
+    void releaseBuffer ();
 
     Pair bucket[kNumSlot];
     int64_t sema = 0;

@@ -454,10 +454,20 @@ public:
         // 51/1024 = 0.0498
         uint32_t rnd_num = wyhash32 ();
 
-        if ((rnd_num & 1023) < 51) {
+        if ((rnd_num & 1023) < (1023 - 102)) {
             return kYCSB_Read;
         } else {
             return kYCSB_Write;
         }
+        // 10% reads   (rnd_num & 1023) < 102 0.0997
+        // 20% reads   (rnd_num & 1023) < 205 0.20039
+        // 30% reads   (rnd_num & 1023) < 307 0.30009
+        // 40% reads   (rnd_num & 1023) < 409 0.3998
+
+        // 50% reads   (rnd_num & 0x1) == 0 0.5
+        // 60% reads   (rnd_num & 1023) < (1023 - 409)
+        // 70% reads   (rnd_num & 1023) < (1023 - 307)
+        // 80% reads   (rnd_num & 1023) < (1023 - 205)
+        // 90% reads   (rnd_num & 1023) < (1023 - 102)
     }
 };
