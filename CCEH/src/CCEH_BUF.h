@@ -13,10 +13,6 @@
 #include "util.h"
 
 #define TOID_ARRAY(x) TOID (x)
-// 16K / BUFFER_SIZE_FACTOR = BUFFER_SIZE
-// #define BUFFER_SIZE_FACTOR 4
-// #define kBufNumMax 1
-// #define bufferRate 0.7
 
 typedef size_t Key_t;
 typedef const char* Value_t;
@@ -40,10 +36,6 @@ POBJ_LAYOUT_TOID (HashTable, struct Directory);  // to define a type that will b
 POBJ_LAYOUT_ROOT (HashTable, struct Segment);    // to define a root object
 POBJ_LAYOUT_TOID (HashTable, TOID (struct Segment));
 POBJ_LAYOUT_END (HashTable);
-
-// to limit the number of buffer in use
-extern std::atomic<uint32_t> bufnum;
-extern std::atomic<uint32_t> curSegnumNum;
 
 constexpr size_t kSegmentBits = 8;
 constexpr size_t kMask = (1 << kSegmentBits) - 1;
@@ -73,54 +65,17 @@ public:
     int32_t getBufferSizeFactor () { return bufferSizeFactor_; }
     int32_t getKBufNumMax () { return kBufNumMax_; }
     double getBufferRate () { return bufferRate_; }
-
-    void initDirEntryMapping (uint64_t initSize) {
-        currentHashCap = initSize;
-        dirEntryMapping = new uint64_t[initSize];
-        memset (dirEntryMapping, 0, initSize * sizeof (uint64_t));
-    }
-    uint64_t getDirEntryMapping () {
-        // return an entry of dir
-        auto randN = rand ();
-        for (uint32_t i = 0; i < probDistance; i++) {
-            auto loc = (randN + i) % currentHashCap;
-            if (dirEntryMapping[loc] != 0) {
-                // TODO : delete ??
-                return loc;
-                ;
-            }
-        }
-    }
-
-    void setDirEntryMapping (uint64_t index) {
-        for (uint32_t i = 0; i < probDistance; i++) {
-            auto loc = (index + i) % currentHashCap;
-            if (dirEntryMapping[loc] == 0) {
-                dirEntryMapping[loc] = index;
-                return;
-            }
-        }
-        // TODO : Collision
-    }
-
-    void removeDirEntryMapping (uint64_t index) {
-        for (uint32_t i = 0; i < probDistance; i++) {
-            auto loc = (index + i) % currentHashCap;
-            if (dirEntryMapping[loc] == index) {
-                dirEntryMapping[loc] = 0;
-                return;
-            }
-        }
-        // Didn't find the index means there is no entry
+    void printConfig () {
+        printf (
+            "| Buffer Size Factor | BufNumMax | BufferRate | \n \
+                |        %d       |     %d    |   %1.1f    | \n ",
+            getBufferSizeFactor (), getKBufNumMax (), getBufferRate ());
     }
 
 private:
     int32_t bufferSizeFactor_;
     int32_t kBufNumMax_;
     double bufferRate_;
-
-    uint64_t currentHashCap;
-    uint64_t* dirEntryMapping;
 };
 
 struct Segment {
@@ -265,16 +220,14 @@ public:
 
     bool crashed = true;
 
-    // record the number of buffer merge to pmem
-    uint32_t buffer_writes;
-    // record the number of valid key in buffer(when merge to pmem)
-    double buffer_kvs;
-    double AverageBufLoadFactor (void);
-
+    uint32_t bufferWrites;
     // check data in segment
     void checkBufferData ();
 
     BufferConfig bufferConfig;
+    // to limit the number of buffer in use
+    std::atomic<uint32_t> bufnum;
+    std::atomic<uint32_t> curSegnumNum;
 
 private:
     TOID (struct Directory) dir;

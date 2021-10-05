@@ -1,9 +1,11 @@
 # CMAKELISTS.TXT UNDER cceh
 set(CCEH_SRCS
-    "CCEH_BUF.cpp"
-    "CCEH_BUF.h"
+    # "CCEH_BUF.cpp"
+    # "CCEH_BUF.h"
     # "CCEH_buflog.cpp"
     # "CCEH_buflog.h"
+    "CCEH_BUF_Exchange.cpp"
+    "CCEH_BUF_Exchange.h"
 )
 
 # Declare the library

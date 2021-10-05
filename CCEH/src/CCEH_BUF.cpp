@@ -19,12 +19,6 @@
 // #define WITHOUT_FLUSH
 #define CONFIG_OUT_OF_PLACE_MERGE
 
-// to limit the number of buffer in use
-std::atomic<uint32_t> bufnum (0);
-
-// to record current # of segment
-std::atomic<uint32_t> curSegnumNum (0);
-
 using namespace std;
 
 void Segment::initSegment (CCEH* _cceh) {
@@ -42,17 +36,16 @@ void Segment::initSegment (CCEH* _cceh) {
     } else {
         // The # of buffer depends on the # of segment.
         if (cceh->bufferConfig.getBufferRate () > 0) {
-            requiredBufNum =
-                cceh->bufferConfig.getBufferRate () * curSegnumNum.load (std::memory_order_relaxed);
+            requiredBufNum = cceh->bufferConfig.getBufferRate () *
+                             _cceh->curSegnumNum.load (std::memory_order_relaxed);
         } else {
             requiredBufNum = cceh->bufferConfig.getKBufNumMax ();
         }
 
-        int32_t tmp = bufnum.load (std::memory_order_relaxed);
+        int32_t tmp = _cceh->bufnum.load (std::memory_order_relaxed);
         if (tmp < requiredBufNum) {
-            int32_t BN = bufnum.fetch_add (1, std::memory_order_relaxed);
+            int32_t BN = _cceh->bufnum.fetch_add (1, std::memory_order_relaxed);
             if (BN < requiredBufNum) {
-                // printf("Avaliable buffer : %lu \n", BN);
                 bufnode_ = new WriteBuffer ();
                 buf_flag = true;
             }
@@ -70,22 +63,19 @@ void Segment::initSegment (size_t depth, CCEH* _cceh) {
     int32_t requiredBufNum;
     cceh = _cceh;
     if (cceh->bufferConfig.getKBufNumMax () < 0) {
-        // printf ("1\n");
         bufnode_ = new WriteBuffer (depth);
         buf_flag = true;
     } else {
         // The # of buffer depends on the # of segment.
         if (cceh->bufferConfig.getBufferRate () > 0) {
-            // printf ("2\n");
-            requiredBufNum = cceh->bufferConfig.getBufferRate () * curSegnumNum;
+            requiredBufNum = cceh->bufferConfig.getBufferRate () * _cceh->curSegnumNum;
         } else {
-            // printf ("3\n");
             requiredBufNum = cceh->bufferConfig.getKBufNumMax ();
         }
 
-        int32_t tmp = bufnum.load (std::memory_order_relaxed);
+        int32_t tmp = _cceh->bufnum.load (std::memory_order_relaxed);
         if (tmp < requiredBufNum) {
-            int32_t BN = bufnum.fetch_add (1, std::memory_order_relaxed);
+            int32_t BN = _cceh->bufnum.fetch_add (1, std::memory_order_relaxed);
             if (BN < requiredBufNum) {
                 // printf("Avaliable buffer : %lu \n", BN);
                 bufnode_ = new WriteBuffer (depth);
@@ -93,14 +83,6 @@ void Segment::initSegment (size_t depth, CCEH* _cceh) {
             }
         }
     }
-}
-
-void Segment::releaseBuffer () {
-    // 1. find out a segment to release its buffer
-
-    // 2. merge the buffer to segment
-
-    // 3. delete the buffer inside
 }
 
 void Segment::execute_path (PMEMobjpool* pop, vector<pair<size_t, size_t>>& path, Key_t& key,
@@ -420,9 +402,6 @@ void CCEH::initCCEH (PMEMobjpool* pop) {
         // add the # of segment
         curSegnumNum.fetch_add (1, std::memory_order_relaxed);
     }
-
-    buffer_writes = 0;
-    buffer_kvs = 0;
 }
 
 void CCEH::initCCEH (PMEMobjpool* pop, size_t initCap) {
@@ -440,9 +419,6 @@ void CCEH::initCCEH (PMEMobjpool* pop, size_t initCap) {
         // add the # of segment
         curSegnumNum.fetch_add (1, std::memory_order_relaxed);
     }
-    // printf("Finished the initialize of the CCEH. \n");
-    buffer_writes = 0;
-    buffer_kvs = 0;
 }
 
 void CCEH::initCCEH (PMEMobjpool* pop, size_t initCap, uint32_t bufferSizeFactor,
@@ -451,9 +427,13 @@ void CCEH::initCCEH (PMEMobjpool* pop, size_t initCap, uint32_t bufferSizeFactor
     bufferConfig.setKBufNumMax (kBufNumMax);
     bufferConfig.setBufferRate (bufferRate);
     // initialize the hash table that store the segment with buffer
-    bufferConfig.initDirEntryMapping (log2 (initCap));
+    // to limit the number of buffer in use
+    std::atomic<uint32_t> bufnum (0);
+    // to record current # of segment
+    std::atomic<uint32_t> curSegnumNum (0);
+    bufferWrites = 0;
 
-    printf ("initCCEH : %d, %d, %2.2f \n", bufferConfig.getKBufNumMax (),
+    printf ("Buffer -> initCCEH : %d, %d, %2.2f \n", bufferConfig.getKBufNumMax (),
             bufferConfig.getBufferSizeFactor (), bufferConfig.getBufferRate ());
 
     crashed = true;
@@ -471,24 +451,7 @@ void CCEH::initCCEH (PMEMobjpool* pop, size_t initCap, uint32_t bufferSizeFactor
         curSegnumNum.fetch_add (1, std::memory_order_relaxed);
     }
     // printf("Finished the initialize of the CCEH. \n");
-    buffer_writes = 0;
-    buffer_kvs = 0;
 }
-
-double buffer_load_factor (WriteBuffer* bufnode) {
-    size_t total_valid_count = 0;
-    size_t total_space = 12 * kWriteBufferSize;
-    // iterate all the valid node in write buffer
-    for (size_t i = 0; i < kWriteBufferSize; i++) {
-        total_valid_count += bufnode->nodes_[i].ValidCount ();
-    }
-    double load_factor = (double)(total_valid_count * 16) / (256 * kWriteBufferSize);
-    // printf("total_valid_count = %lu, total_space = %lu, Load Factor : %2.2f
-    // \n",total_valid_count, total_space, load_factor);
-    return load_factor;
-}
-
-double CCEH::AverageBufLoadFactor () { return buffer_kvs / buffer_writes; }
 
 void CCEH::checkBufferData () {
     size_t key_left = 0;
@@ -515,7 +478,7 @@ void CCEH::checkBufferData () {
     // printf("# of segments : %lu, # of buffers : %lu, curSegnumNum = %lu\n", segmentcnt, bufcnt,
     // curSegnumNum.load()); printf("# of segments : %lu, # of buffers : %lu\n", segmentcnt,
     // curSegnumNum.load());
-    // printf ("# of segments : %lu, # of buffers : %lu\n", segmentcnt, bufcnt);
+    printf ("# of segments : %lu, # of buffers : %lu\n", segmentcnt, bufcnt);
     // printf ("%lu, %lu\n", segmentcnt, bufcnt);
     // printf ("%d, %d, %2.2f \n", bufferConfig.getKBufNumMax (), bufferConfig.getBufferSizeFactor
     // (),
@@ -560,14 +523,7 @@ retry:
     if (isValidPut) {
         target_ptr->bufnode_->Unlock ();
     } else {
-        // if (!target_ptr->buf_flag) {
-        // 	double load_factor = buffer_load_factor(target_ptr->bufnode_);
-        // 	buffer_writes += 1;
-        // 	buffer_kvs += load_factor;
-        // }
-
-        // printf("# of Merge %lu,avg LF = %2.2f \n", buffer_writes, buffer_kvs/buffer_writes);
-
+        bufferWrites++;
         /* the buffer is full, merge the buffer to the segment (OUT-OF-PLACE Merge) */
 #ifndef CONFIG_OUT_OF_PLACE_MERGE
         auto iter = D_RW (target)->bufnode_->Begin ();
