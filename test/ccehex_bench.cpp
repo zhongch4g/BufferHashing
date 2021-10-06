@@ -507,6 +507,10 @@ public:
                 fresh_db = true;
                 method = &Benchmark::DoWrite;
             }
+            if (name == "loadtest") {
+                fresh_db = true;
+                method = &Benchmark::DoWriteTest;
+            }
             if (name == "loadbuf") {
                 fresh_db = true;
                 method = &Benchmark::DoWriteBuf;
@@ -784,6 +788,41 @@ public:
             thread->stats.FinishedBatchOp (j);
         }
 
+        thread->stats.real_finish_ = NowMicros ();
+        sleep (3);
+        if (thread->tid == 0) {
+            D_RW (hashtable_)->checkBufferData ();
+        }
+        return;
+    }
+
+    void DoWriteTest (ThreadState* thread) {
+        uint64_t batch = FLAGS_batch;
+        if (key_trace_ == nullptr) {
+            perror ("DoWrite lack key_trace_ initialization.");
+            return;
+        }
+        size_t interval = num_ / FLAGS_thread;
+        size_t start_offset = thread->tid * interval;
+        auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
+        // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+        //         start_offset + interval);
+        thread->stats.Start ();
+        std::string val (value_size_, 'v');
+        size_t inserted = 0;
+        while (key_iterator.Valid ()) {
+            uint64_t j = 0;
+            for (; j < batch && key_iterator.Valid (); j++) {
+                inserted++;
+                size_t ikey = key_iterator.Next ();
+                D_RW (hashtable_)->Insert (pop_, ikey, reinterpret_cast<Value_t> (ikey));
+            }
+            thread->stats.FinishedBatchOp (j);
+            if (thread->tid == 0) {
+                D_RW (hashtable_)->checkBufferData ();
+            }
+        }
+        // printf ("bufferWrites : %d \n", D_RW (hashtable_)->bufferWrites);
         thread->stats.real_finish_ = NowMicros ();
         sleep (3);
         if (thread->tid == 0) {
