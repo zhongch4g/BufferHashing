@@ -1,1 +1,0 @@
-No functional PMem modules in the system.

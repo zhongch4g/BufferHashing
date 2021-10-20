@@ -186,6 +186,7 @@ public:
         if (outer_imc_write_addr) *outer_imc_write_addr = imc_write_size_MB;
         if (outer_media_read_addr) *outer_media_read_addr = media_read_size_MB;
         if (outer_media_write_addr) *outer_media_write_addr = media_write_size_MB;
+        printf ("dimm_num = %d \n", dimm_num);
         for (int i = 0; i < dimm_num; i++) {
             printf (
                 "DIMM%d | Read from IMC | Write from IMC |  Read DIMM  |  Write "
@@ -327,6 +328,7 @@ public:
 
     class RangeIterator {
     public:
+        RangeIterator () {}
         RangeIterator (std::vector<size_t>* pkey_vec, size_t start, size_t end)
             : pkey_vec_ (pkey_vec), end_index_ (end), cur_index_ (start) {}
 

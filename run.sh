@@ -42,7 +42,12 @@
 #     sudo numactl -N 0 ./release/cceh_bench --thread=8 --benchmarks=load --num=120000000 --stats_interval=1000000 --ins_num=1 --bufferRate=$i --bufferNum=1 >> buffer-impact/bufferrate_$i.log
 # done
 
-for i in 0 20000 40000 60000 80000 100000 120000 140000 160000
-do
-    sudo numactl -N 0 ./release/cceh_bench --thread=8 --benchmarks=load --num=120000000 --stats_interval=1000000 --ins_num=1 --bufferRate=0 --bufferNum=$i >> buffer-impact/bufferN_load_$i.log
-done
+# for i in 0 20000 40000 60000 80000 100000 120000 140000 160000
+# do
+#     sudo numactl -N 0 ./release/cceh_bench --thread=8 --benchmarks=load --num=120000000 --stats_interval=1000000 --ins_num=1 --bufferRate=0 --bufferNum=$i >> buffer-impact/bufferN_load_$i.log
+# done
+
+cd release && make -j32
+cd ..
+sudo numactl -N 0 ./release/ccehex_bench --thread=16 --benchmarks=loadtest3 --num=240000000 --ins_num=2 --report_interval=5 --batch=10000 >> log.log
+# sudo numactl -N 0 ./release/ccehex_bench --thread=8 --benchmarks=loadtest --num=120000000 --ins_num=1 --bufferRate=1 --bufferNum=1 --batch=1000000 >> release/nbufferwrites1.log
