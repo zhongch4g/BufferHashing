@@ -49,5 +49,5 @@
 
 cd release && make -j32
 cd ..
-sudo numactl -N 0 ./release/ccehex_bench --thread=16 --benchmarks=loadtest3 --num=240000000 --ins_num=2 --report_interval=5 --batch=10000 >> log.log
+sudo numactl -N 0 ./release/ccehex_bench --thread=2 --benchmarks=loadtest3 --num=240000000 --ins_num=2 --report_interval=1 --batch=10000 >> log.log
 # sudo numactl -N 0 ./release/ccehex_bench --thread=8 --benchmarks=loadtest --num=120000000 --ins_num=1 --bufferRate=1 --bufferNum=1 --batch=1000000 >> release/nbufferwrites1.log
