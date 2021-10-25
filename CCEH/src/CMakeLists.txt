@@ -4,8 +4,10 @@ set(CCEH_SRCS
     # "CCEH_BUF.h"
     # "CCEH_buflog.cpp"
     # "CCEH_buflog.h"
-    "CCEH_BUF_Exchange.cpp"
-    "CCEH_BUF_Exchange.h"
+    # "CCEH_BUF_Exchange.cpp"
+    # "CCEH_BUF_Exchange.h"
+    "CCEH_BUF_dual.cpp"
+    "CCEH_BUF_dual.h"
 )
 
 # Declare the library
