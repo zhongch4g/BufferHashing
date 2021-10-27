@@ -60,6 +60,9 @@
         "map": "cpp",
         "set": "cpp",
         "regex": "cpp",
-        "iostream": "cpp"
+        "iostream": "cpp",
+        "hash_map": "cpp",
+        "hash_set": "cpp",
+        "list": "cpp"
     }
 }

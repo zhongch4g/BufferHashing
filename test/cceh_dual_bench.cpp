@@ -45,8 +45,7 @@ DEFINE_bool (hist, false, "");
 DEFINE_string (benchmarks, "load,readall", "");
 DEFINE_int32 (writeThreads, 1,
               "For readwhilewriting, determine how many write threads out of 16 threads.");
-DEFINE_double (bufferRate, 0, "");
-DEFINE_int32 (bufferNum, -1, "");
+DEFINE_int32 (bufferNum, 1000000, "How many buffer provides?");
 
 namespace {
 
@@ -367,18 +366,12 @@ public:
     PMEMobjpool* pop_;
     PMEMobjpool* pop0_;
     PMEMobjpool* pop1_;
-    std::vector<PMEMobjpool*> vpop_;
     TOID (CCEH) hashtable_;
     TOID (CCEH) hashtable0_;
     TOID (CCEH) hashtable1_;
-    std::vector<TOID (CCEH)> vhashtable_;
     uint32_t ins_num_;
     std::atomic<uint32_t> trace_counter_;
     std::atomic<uint32_t> trace_counter1_;
-    std::atomic<uint32_t> totalMinorCompaction0_;
-    std::atomic<uint32_t> totalMinorCompaction1_;
-    std::atomic<uint32_t> passCounter0_;
-    std::atomic<uint32_t> passCounter1_;
 
     Benchmark ()
         : num_ (FLAGS_num),
@@ -386,10 +379,7 @@ public:
           reads_ (FLAGS_read),
           writes_ (FLAGS_write),
           key_trace_ (nullptr),
-          preload_key_trace_ (nullptr),
-          hashtable_ (OID_NULL),
-          trace_counter_ (0),
-          trace_counter1_ (FLAGS_num / 10000 / 2) {
+          hashtable_ (OID_NULL) {
         remove (FLAGS_filepath.c_str ());  // delete the mapped file.
         pop_ = pmemobj_create (FLAGS_filepath.c_str (), "CCEH", POOL_SIZE, 0666);
         if (!pop_) {
@@ -399,10 +389,8 @@ public:
 
         const size_t initialSize = 1024 * FLAGS_initsize;  // 16 million initial
         hashtable_ = POBJ_ROOT (pop_, CCEH);
-        // D_RW (hashtable_)->initCCEH (pop_, initialSize);
         printf ("Single CCEH \n");
-        // D_RW (hashtable_)->initCCEH (pop_, initialSize, 4, FLAGS_bufferNum, FLAGS_bufferRate);
-        D_RW (hashtable_)->initCCEH (pop_, initialSize);
+        D_RW (hashtable_)->initCCEH (pop_, initialSize, FLAGS_bufferNum);
     }
 
     ~Benchmark () {}
@@ -435,6 +423,10 @@ public:
             if (name == "load") {
                 fresh_db = true;
                 method = &Benchmark::DoWrite;
+            }
+            if (name == "load1") {
+                fresh_db = true;
+                method = &Benchmark::DoWriteTest;
             }
             if (name == "loadlat") {
                 fresh_db = true;
@@ -694,6 +686,33 @@ public:
                 D_RW (hashtable_)->Insert (pop_, ikey, reinterpret_cast<Value_t> (ikey));
             }
             thread->stats.FinishedBatchOp (j);
+        }
+        return;
+    }
+
+    void DoWriteTest (ThreadState* thread) {
+        uint64_t batch = FLAGS_batch;
+        if (key_trace_ == nullptr) {
+            perror ("DoWrite lack key_trace_ initialization.");
+            return;
+        }
+        size_t interval = num_ / FLAGS_thread;
+        size_t start_offset = thread->tid * interval;
+        auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
+        // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+        //         start_offset + interval);
+        thread->stats.Start ();
+        std::string val (value_size_, 'v');
+        size_t inserted = 0;
+        while (key_iterator.Valid ()) {
+            uint64_t j = 0;
+            for (; j < batch && key_iterator.Valid (); j++) {
+                inserted++;
+                size_t ikey = key_iterator.Next ();
+                D_RW (hashtable_)->Insert (pop_, ikey, reinterpret_cast<Value_t> (ikey));
+            }
+            thread->stats.FinishedBatchOp (j);
+            // if (thread->tid == 0) D_RW (hashtable_)->BufferCheck ();
         }
         return;
     }
@@ -1067,7 +1086,7 @@ int main (int argc, char* argv[]) {
 
     int sds_write_value = 0;
     pmemobj_ctl_set (NULL, "sds.at_create", &sds_write_value);
-
+    printf ("cceh dual bench started.\n");
     if (1 == FLAGS_ins_num) {
         Benchmark benchmark;
         benchmark.Run ();
