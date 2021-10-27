@@ -407,42 +407,6 @@ public:
         D_RW (hashtable_)->initCCEH (pop_, initialSize, 4, FLAGS_bufferNum, FLAGS_bufferRate);
     }
 
-    /*
-        Benchmark (uint32_t ins_num)
-            : num_ (FLAGS_num),
-              value_size_ (FLAGS_value_size),
-              reads_ (FLAGS_read),
-              writes_ (FLAGS_write),
-              key_trace_ (nullptr),
-              preload_key_trace_ (nullptr),
-              hashtable_ (OID_NULL),
-              ins_num_ (FLAGS_ins_num) {
-            const size_t initialSize = 1024 * FLAGS_initsize;  // 16 million initial
-            std::string file_path1 = "/mnt/pmem";
-            std::string file_path2 = "/objpool.data";
-            std::string file_path;
-            int32_t bufferSizeFactorConfig[] = {4, 4};
-            int32_t kBufNumMaxConfig[] = {70000, 70000};  // set it to -1 means full of buffer
-            double bufferRateConfig[] = {0, 0};  // kbufnum -1 and rate 0 means no buffer at all
-
-            for (uint32_t n = 0; n < ins_num_; n++) {
-                // the file path here must be start at pmem0 directory: pmem0, pmem1, ..., pmemN
-                file_path = file_path1 + std::to_string (n) + file_path2;
-                remove ((file_path).c_str ());
-                pop_ = pmemobj_create (file_path.c_str (), "CCEH", POOL_SIZE, 0666);
-                if (!pop_) {
-                    perror ((file_path + "\npmemoj_create").c_str ());
-                    exit (1);
-                }
-                vpop_.push_back (pop_);
-                hashtable_ = POBJ_ROOT (pop_, CCEH);
-                D_RW (hashtable_)
-                    ->initCCEH (pop_, initialSize, bufferSizeFactorConfig[n], kBufNumMaxConfig[n],
-                                bufferRateConfig[n]);
-                vhashtable_.push_back (hashtable_);
-            }
-        }
-    */
     Benchmark (uint32_t ins_num)
         : num_ (FLAGS_num),
           value_size_ (FLAGS_value_size),

@@ -63,6 +63,9 @@
         "iostream": "cpp",
         "hash_map": "cpp",
         "hash_set": "cpp",
-        "list": "cpp"
+        "list": "cpp",
+        "unordered_set": "cpp",
+        "forward_list": "cpp",
+        "variant": "cpp"
     }
 }

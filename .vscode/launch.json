@@ -11,7 +11,7 @@
             // "program": "${workspaceFolder}/CCEH-BUFLOG/debug/ccehex_bench",
             "program": "${workspaceFolder}/debug/cceh_dual_bench",
             "args": [
-                "--thread=1","--benchmarks=load1","--num=120000000","--bufferNum=100000"
+                "--thread=1","--benchmarks=load","--num=120000000","--bufferNum=1000000"
             ],
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
