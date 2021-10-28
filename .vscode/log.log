@@ -1,3 +1,21 @@
-[2021-10-27 13:44:45.621273][04512] [ INFO] [CCEH_BUF_dual.h initDirectory:185] Directory capacity: 16384. depth 14
-[2021-10-27 13:49:07.278575][39712] [ INFO] [CCEH_BUF_dual.cpp mergeBufAndSplitWhenNeeded:719] Double Directory Begin
-[2021-10-27 13:49:07.280516][39712] [ INFO] [CCEH_BUF_dual.h initDirectory:185] Directory capacity: 32768. depth 15
+[2021-10-28 10:11:52.976984][04512] [ INFO] [CCEH_BUF_dual.h initDirectory:181] Directory capacity: 16384. depth 14
+[2021-10-28 10:11:54.508566][04512] [ INFO] [CCEH_BUF_dual.h initDirectory:181] Directory capacity: 16384. depth 14
+[2021-10-28 10:17:28.177162][36640] [ INFO] [CCEH_BUF_dual.cpp mergeBufAndSplitWhenNeeded:755] Double Directory Begin
+[2021-10-28 10:17:28.177618][51232] [ INFO] [CCEH_BUF_dual.cpp mergeBufAndSplitWhenNeeded:755] Double Directory Begin
+[2021-10-28 10:17:28.179013][36640] [ INFO] [CCEH_BUF_dual.h initDirectory:181] Directory capacity: 32768. depth 15
+[2021-10-28 10:17:28.179365][51232] [ INFO] [CCEH_BUF_dual.h initDirectory:181] Directory capacity: 32768. depth 15
+[2021-10-28 10:17:31.413426][65824] [ INFO] [CCEH_BUF_dual.cpp mergeBufAndSplitWhenNeeded:755] Double Directory Begin
+[2021-10-28 10:17:31.416110][65824] [ INFO] [CCEH_BUF_dual.h initDirectory:181] Directory capacity: 65536. depth 16
+[2021-10-28 10:17:31.425530][07456] [ INFO] [CCEH_BUF_dual.cpp mergeBufAndSplitWhenNeeded:755] Double Directory Begin
+[2021-10-28 10:17:31.428613][07456] [ INFO] [CCEH_BUF_dual.h initDirectory:181] Directory capacity: 65536. depth 16
+[2021-10-28 10:17:37.311271][65824] [ INFO] [CCEH_BUF_dual.cpp mergeBufAndSplitWhenNeeded:755] Double Directory Begin
+[2021-10-28 10:17:37.314189][65824] [ INFO] [CCEH_BUF_dual.h initDirectory:181] Directory capacity: 131072. depth 17
+[2021-10-28 10:17:37.329569][00160] [ INFO] [CCEH_BUF_dual.cpp mergeBufAndSplitWhenNeeded:755] Double Directory Begin
+[2021-10-28 10:17:37.330993][00160] [ INFO] [CCEH_BUF_dual.h initDirectory:181] Directory capacity: 131072. depth 17
+[2021-10-28 10:17:47.207224][87712] [ INFO] [CCEH_BUF_dual.cpp SplitDram:187] S hash iter 1 insert fail.
+[2021-10-28 10:17:47.414279][58528] [ INFO] [CCEH_BUF_dual.cpp SplitDram:187] S hash iter 1 insert fail.
+[2021-10-28 10:17:48.549627][80416] [ INFO] [CCEH_BUF_dual.cpp SplitDram:195] S hash iter 0 insert fail
+[2021-10-28 10:17:48.976430][29344] [ INFO] [CCEH_BUF_dual.cpp mergeBufAndSplitWhenNeeded:755] Double Directory Begin
+[2021-10-28 10:17:48.979563][29344] [ INFO] [CCEH_BUF_dual.h initDirectory:181] Directory capacity: 262144. depth 18
+[2021-10-28 10:17:49.405487][02304] [ INFO] [CCEH_BUF_dual.cpp mergeBufAndSplitWhenNeeded:755] Double Directory Begin
+[2021-10-28 10:17:49.408530][02304] [ INFO] [CCEH_BUF_dual.h initDirectory:181] Directory capacity: 262144. depth 18
