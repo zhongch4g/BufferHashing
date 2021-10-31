@@ -46,6 +46,7 @@ DEFINE_string (benchmarks, "load,readall", "");
 DEFINE_int32 (writeThreads, 1,
               "For readwhilewriting, determine how many write threads out of 16 threads.");
 DEFINE_int32 (bufferNum, 1000000, "How many buffer provides?");
+DEFINE_int32 (granularity, 1, "how many buffers transfer?");
 
 namespace {
 
@@ -110,18 +111,17 @@ public:
         int64_t usecs_since_last = now - last_report_finish_;
 
         std::string cur_time = TimeToString (now / 1000000);
-        printf (
-            "%s ... thread %d: (%lu,%lu) ops and "
-            "( %.1f,%.1f ) ops/second in (%.4f,%.4f) seconds\n",
-            cur_time.c_str (), tid_, last_report_done_, done_,
-            (done_ - last_report_done_) / (usecs_since_last / 1000000.0),
-            done_ / ((now - start_) / 1000000.0), (now - last_report_finish_) / 1000000.0,
-            (now - start_) / 1000000.0);
+        // printf (
+        //     "%s ... thread %d: (%lu,%lu) ops and "
+        //     "( %.1f,%.1f ) ops/second in (%.4f,%.4f) seconds\n",
+        //     cur_time.c_str (), tid_, last_report_done_, done_,
+        //     (done_ - last_report_done_) / (usecs_since_last / 1000000.0),
+        //     done_ / ((now - start_) / 1000000.0), (now - last_report_finish_) / 1000000.0,
+        //     (now - start_) / 1000000.0);
 
         // each epoch speed
-        // printf ("%d,%lu,%lu,%.4f,%.4f\n", tid_, last_report_done_, done_,
-        //         usecs_since_last / 1000000.0,
-        //         (done_ - last_report_done_) / (usecs_since_last / 1000000.0) / 1024 / 1024);
+        printf ("TIME|%d,%lu,%lu,%.4f,%.4f\n", tid_, last_report_done_, done_,
+                usecs_since_last / 1000000.0, (now - start_) / 1000000.0);
         last_report_finish_ = now;
         last_report_done_ = done_;
         fflush (stdout);
@@ -418,7 +418,7 @@ public:
         std::string file_path1 = "/mnt/pmem";
         std::string file_path2 = "/objpool.data";
         std::string file_path;
-        int32_t kBufNumMaxConfig[] = {50000, 50000};  // set it to -1 means full of buffer
+        int32_t kBufNumMaxConfig[] = {30000, 30000};  // set it to -1 means full of buffer
 
         file_path = file_path1 + "0" + file_path2;
         printf ("Remove pmem file : %s \n", (file_path).c_str ());
@@ -823,7 +823,8 @@ public:
                 if (thread->tid < nthread) {
                     bool mp0 = false;
                     // if (thread->ycsb_gen.NextG () == kYCSB_Write) {
-                    if (1) {
+                    if (thread->ycsb_gen.NextH () == kYCSB_Write) {
+                        // if (1) {
                         mp0 = D_RW (hashtable0_)
                                   ->Insert (pop0_, ikey, reinterpret_cast<Value_t> (ikey));
                     } else {
@@ -877,19 +878,19 @@ public:
                     totalMinorCompaction1 = MC1;
                     // printf ("gap0 = %u, gap1 = %u \n", gap0, gap1);
                     // TODO : ACTION
-                    if (gap0 > gap1 * 1.2) {  // increase 0 buffer
+                    if (gap0 > gap1 * 1.4) {  // increase 0 buffer
                         if (D_RW (hashtable0_)->curBufferNum.load (std::memory_order_relaxed) <
                             D_RW (hashtable0_)->bufferConfig.getKBufNumMax ()) {
                         } else {
-                            D_RW (hashtable1_)->balance.fetch_add (1);
-                            D_RW (hashtable0_)->balance.fetch_sub (1);
+                            D_RW (hashtable1_)->balance.fetch_add (FLAGS_granularity);
+                            D_RW (hashtable0_)->balance.fetch_sub (FLAGS_granularity);
                         }
-                    } else if (gap0 * 1.2 < gap1) {
+                    } else if (gap0 * 1.4 < gap1) {
                         if (D_RW (hashtable1_)->curBufferNum.load (std::memory_order_relaxed) <
                             D_RW (hashtable1_)->bufferConfig.getKBufNumMax ()) {
                         } else {
-                            D_RW (hashtable0_)->balance.fetch_add (1);
-                            D_RW (hashtable1_)->balance.fetch_sub (1);
+                            D_RW (hashtable0_)->balance.fetch_add (FLAGS_granularity);
+                            D_RW (hashtable1_)->balance.fetch_sub (FLAGS_granularity);
                         }
                     }
                 }
@@ -917,7 +918,16 @@ public:
             if (thread->tid == 0) {
                 uint32_t h0 = D_RW (hashtable0_)->curBufferNum.load (std::memory_order_relaxed);
                 uint32_t h1 = D_RW (hashtable1_)->curBufferNum.load (std::memory_order_relaxed);
-                printf ("cceh0 = %u, cceh1 = %u, total = %u \n", h0, h1, h0 + h1);
+                int32_t b0 = D_RW (hashtable0_)->balance.load (std::memory_order_relaxed);
+                int32_t b1 = D_RW (hashtable1_)->balance.load (std::memory_order_relaxed);
+                int32_t vb = validBuffer.load (std::memory_order_relaxed);
+                // printf ("cceh0=%u cceh1=%u total=%u|b0=%d b1=%d valid=%d sum=%d\n", h0, h1, h0 +
+                // h1,
+                //         b0, b1, vb, b0 + b1 + vb);
+                printf ("%u,%u,%u\n", h0, h1, h0 + h1);
+                // printf ("bufmax0=%u|bufmax1=%d\n",
+                //         D_RW (hashtable0_)->bufferConfig.getKBufNumMax (),
+                //         D_RW (hashtable1_)->bufferConfig.getKBufNumMax ());
             }
         }
         thread->stats.real_finish_ = NowMicros ();

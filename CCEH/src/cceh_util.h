@@ -456,7 +456,7 @@ public:
         // 51/1024 = 0.0498
         uint32_t rnd_num = wyhash32 ();
 
-        if ((rnd_num & 1023) < 716) {
+        if ((rnd_num & 1023) < 307) {
             return kYCSB_Read;
         } else {
             return kYCSB_Write;
