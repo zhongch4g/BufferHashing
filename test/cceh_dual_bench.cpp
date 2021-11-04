@@ -376,6 +376,8 @@ public:
     uint32_t totalMinorCompaction1;
     std::atomic<uint32_t> passCounter0_;
     std::atomic<uint32_t> passCounter1_;
+    std::atomic<uint32_t> releaseCount0_;
+    std::atomic<uint32_t> releaseCount1_;
 
     Benchmark ()
         : num_ (FLAGS_num),
@@ -413,7 +415,9 @@ public:
           totalMinorCompaction0 (0),
           totalMinorCompaction1 (0),
           passCounter0_ (0),
-          passCounter1_ (0) {
+          passCounter1_ (0),
+          releaseCount0_ (0),
+          releaseCount1_ (0) {
         const size_t initialSize = 1024 * FLAGS_initsize;  // 16 million initial
         std::string file_path1 = "/mnt/pmem";
         std::string file_path2 = "/objpool.data";
@@ -826,8 +830,8 @@ public:
                 if (thread->tid < nthread) {
                     bool mp0 = false;
                     // if (thread->ycsb_gen.NextG () == kYCSB_Write) {
-                    if (thread->ycsb_gen.NextH () == kYCSB_Write) {
-                        // if (1) {
+                    // if (thread->ycsb_gen.NextH () == kYCSB_Write) {
+                    if (1) {
                         mp0 = D_RW (hashtable0_)
                                   ->Insert (pop0_, ikey, reinterpret_cast<Value_t> (ikey));
                     } else {
@@ -877,64 +881,32 @@ public:
                 totalMinorCompaction1 = MC1;
                 // printf ("gap0 = %u, gap1 = %u \n", gap0, gap1);
                 // TODO : ACTION
-                if (D_RW (hashtable0_)->curBufferNum.load (std::memory_order_relaxed) >= 30000 ||
-                    D_RW (hashtable1_)->curBufferNum.load (std::memory_order_relaxed) >= 30000) {
+                if (validBufferFlag) {
                     if (gap0 > gap1 * 1.4) {  // increase 0 buffer
-                        D_RW (hashtable1_)->balance.fetch_add (1);
-                        D_RW (hashtable0_)->balance.fetch_sub (1);
+                        D_RW (hashtable1_)->balance.fetch_add (FLAGS_granularity);
+                        D_RW (hashtable0_)->balance.fetch_sub (FLAGS_granularity);
                     } else if (gap0 * 1.4 < gap1) {
-                        D_RW (hashtable0_)->balance.fetch_add (1);
-                        D_RW (hashtable1_)->balance.fetch_sub (1);
+                        D_RW (hashtable0_)->balance.fetch_add (FLAGS_granularity);
+                        D_RW (hashtable1_)->balance.fetch_sub (FLAGS_granularity);
                     }
                 }
             }
             // }
 
-            // try to transfer the buffer-> check every 10000 ops
-            if (validBuffer_.load (std::memory_order_relaxed) > 0) {
-                if (D_RW (hashtable0_)->balance.load (std::memory_order_relaxed) < 0) {
-                    // validBuffer_.fetch_sub (1, std::memory_order_relaxed);
-                    // if (validBuffer_.load (std::memory_order_relaxed) >= 0) {
-                    if (D_RW (hashtable0_)->curBufferNum.load (std::memory_order_relaxed) >=
-                        D_RW (hashtable0_)->bufferConfig.getKBufNumMax ()) {
-                        D_RW (hashtable0_)->bufferConfig.fetchAddKBufNumMax (1);
-                        D_RW (hashtable1_)->bufferConfig.fetchSubKBufNumMax (1);
-                    }
-
-                    D_RW (hashtable0_)->balance.fetch_add (1);
-                    D_RW (hashtable1_)->balance.fetch_sub (1);
-                    // } else {
-                    //     validBuffer_.fetch_add (1, std::memory_order_relaxed);
-                    // }
-                }
-
-                if (D_RW (hashtable1_)->balance.load (std::memory_order_relaxed) < 0) {
-                    // validBuffer_.fetch_sub (1, std::memory_order_relaxed);
-                    // if (validBuffer_.load (std::memory_order_relaxed) >= 0) {
-                    if (D_RW (hashtable1_)->curBufferNum.load (std::memory_order_relaxed) >=
-                        D_RW (hashtable1_)->bufferConfig.getKBufNumMax ()) {
-                        D_RW (hashtable1_)->bufferConfig.fetchAddKBufNumMax (1);
-                        D_RW (hashtable0_)->bufferConfig.fetchSubKBufNumMax (1);
-                    }
-                    D_RW (hashtable1_)->balance.fetch_add (1);
-                    D_RW (hashtable0_)->balance.fetch_sub (1);
-                    // } else {
-                    //     validBuffer_.fetch_add (1, std::memory_order_relaxed);
-                    // }
-                }
-            } else if (validBuffer.load (std::memory_order_relaxed) > 0) {
-                if (D_RW (hashtable0_)->balance.load (std::memory_order_relaxed) < 0) {
-                    validBuffer.fetch_sub (1, std::memory_order_relaxed);
-                    if (validBuffer.load (std::memory_order_relaxed) >= 0) {
+            if (validBufferFlag) {
+                int32_t hashb0 = D_RW (hashtable0_)->balance.load (std::memory_order_relaxed);
+                if (hashb0 < 0) {
+                    int32_t vb0 = validBuffer.fetch_sub (1, std::memory_order_relaxed);
+                    if (vb0 > 0) {
                         D_RW (hashtable0_)->increaseBuffer ();
                     } else {
                         validBuffer.fetch_add (1, std::memory_order_relaxed);
                     }
                 }
-
-                if (D_RW (hashtable1_)->balance.load (std::memory_order_relaxed) < 0) {
-                    validBuffer.fetch_sub (1, std::memory_order_relaxed);
-                    if (validBuffer.load (std::memory_order_relaxed) >= 0) {
+                int32_t hashb1 = D_RW (hashtable1_)->balance.load (std::memory_order_relaxed);
+                if (hashb1 < 0) {
+                    int32_t vb1 = validBuffer.fetch_sub (1, std::memory_order_relaxed);
+                    if (vb1 > 0) {
                         D_RW (hashtable1_)->increaseBuffer ();
                     } else {
                         validBuffer.fetch_add (1, std::memory_order_relaxed);
@@ -949,17 +921,27 @@ public:
                 int32_t b0 = D_RW (hashtable0_)->balance.load (std::memory_order_relaxed);
                 int32_t b1 = D_RW (hashtable1_)->balance.load (std::memory_order_relaxed);
                 int32_t vb = validBuffer.load (std::memory_order_relaxed);
-                int32_t maxbuf0 = D_RW (hashtable0_)->bufferConfig.getKBufNumMax ();
-                int32_t maxbuf1 = D_RW (hashtable1_)->bufferConfig.getKBufNumMax ();
-                printf ("cceh0=%u cceh1=%u total=%u|b0=%d b1=%d valid=%d buf0=%d,buf0=%d, %d\n", h0,
-                        h1, h0 + h1, b0, b1, vb, maxbuf0, maxbuf1,
-                        validBuffer_.load (std::memory_order_relaxed));
+                // printf ("cceh0=%u cceh1=%u total=%u|b0=%d b1=%d valid=%d, %d\n", h0, h1, h0 + h1,
+                //         b0, b1, vb, validBufferFlag);
 
-                // printf ("%u,%u,%u\n", h0, h1, h0 + h1);
+                printf ("%u,%u,%u\n", h0, h1, h0 + h1);
                 // D_RW (hashtable1_)->BufferCheck ();
             }
         }
         thread->stats.real_finish_ = NowMicros ();
+        if (thread->tid > 7) {
+            uint32_t cnt = releaseCount1_.fetch_add (1, std::memory_order_relaxed);
+            // printf ("cnt = %d \n", cnt);
+            if (cnt == 7) {
+                // printf ("??");
+                // D_RW (hashtable1_)->releaseAllBuffers ();
+                int32_t numbuf = D_RW (hashtable1_)->curBufferNum.load (std::memory_order_relaxed);
+                D_RW (hashtable1_)->curBufferNum.store (0);
+                D_RW (hashtable1_)->balance.fetch_add (numbuf, std::memory_order_relaxed);
+                validBuffer.fetch_add (numbuf, std::memory_order_relaxed);
+                D_RW (hashtable0_)->balance.fetch_sub (numbuf, std::memory_order_relaxed);
+            }
+        }
         return;
     }
 
