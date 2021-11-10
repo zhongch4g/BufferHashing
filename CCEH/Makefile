@@ -1,6 +1,6 @@
 .PHONY: all clean
 
-CXX := g++-10 -O3 -std=c++17 -g
+CXX := g++-10 -O3 -std=c++17
 CFLAGS := -I./ -lrt
 
 all: test ycsb

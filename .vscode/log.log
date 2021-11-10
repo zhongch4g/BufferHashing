@@ -1,8 +1,0 @@
-[2021-10-28 14:59:44.626353][04512] [ INFO] [CCEH_BUF_dual.h initDirectory:181] Directory capacity: 16384. depth 14
-[2021-10-28 14:59:45.623357][04512] [ INFO] [CCEH_BUF_dual.h initDirectory:181] Directory capacity: 16384. depth 14
-[2021-10-28 15:00:58.673807][58528] [ INFO] [CCEH_BUF_dual.cpp mergeBufAndSplitWhenNeeded:762] Double Directory Begin
-[2021-10-28 15:00:58.676325][58528] [ INFO] [CCEH_BUF_dual.h initDirectory:181] Directory capacity: 32768. depth 15
-[2021-10-28 15:01:01.950287][95008] [ INFO] [CCEH_BUF_dual.cpp mergeBufAndSplitWhenNeeded:762] Double Directory Begin
-[2021-10-28 15:01:01.953117][95008] [ INFO] [CCEH_BUF_dual.h initDirectory:181] Directory capacity: 65536. depth 16
-[2021-10-28 15:01:06.164813][07456] [ INFO] [CCEH_BUF_dual.cpp mergeBufAndSplitWhenNeeded:762] Double Directory Begin
-[2021-10-28 15:01:06.167046][07456] [ INFO] [CCEH_BUF_dual.h initDirectory:181] Directory capacity: 32768. depth 15

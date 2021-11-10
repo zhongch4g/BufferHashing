@@ -456,7 +456,7 @@ public:
         // 51/1024 = 0.0498
         uint32_t rnd_num = wyhash32 ();
 
-        if ((rnd_num & 1023) < 307) {
+        if ((rnd_num & 1023) < 921) {
             return kYCSB_Read;
         } else {
             return kYCSB_Write;
@@ -468,9 +468,9 @@ public:
 
         // 50% reads   (rnd_num & 0x1) == 0 0.5
         // 60% reads   (rnd_num & 1023) < (1023 - 409)
-        // 70% reads   (rnd_num & 1023) < (1023 - 307)
-        // 80% reads   (rnd_num & 1023) < (1023 - 205)
-        // 90% reads   (rnd_num & 1023) < (1023 - 102)
+        // 70% reads   (rnd_num & 1023) < (1023 - 307) = 716
+        // 80% reads   (rnd_num & 1023) < (1023 - 205) = 818
+        // 90% reads   (rnd_num & 1023) < (1023 - 102) = 921
     }
 
     inline YCSBOpType NextH () {

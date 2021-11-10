@@ -422,7 +422,7 @@ public:
         std::string file_path1 = "/mnt/pmem";
         std::string file_path2 = "/objpool.data";
         std::string file_path;
-        int32_t kBufNumMaxConfig[] = {30000, 30000};  // set it to -1 means full of buffer
+        int32_t kBufNumMaxConfig[] = {1000000, 1000000};  // set it to -1 means full of buffer
 
         file_path = file_path1 + "0" + file_path2;
         printf ("Remove pmem file : %s \n", (file_path).c_str ());
@@ -747,7 +747,12 @@ public:
             for (; j < batch && key_iterator.Valid (); j++) {
                 inserted++;
                 size_t ikey = key_iterator.Next ();
-                D_RW (hashtable_)->Insert (pop_, ikey, reinterpret_cast<Value_t> (ikey));
+                if (false && thread->ycsb_gen.NextG () == kYCSB_Write) {
+                    // if (1) {
+                    D_RW (hashtable_)->Insert (pop_, ikey, reinterpret_cast<Value_t> (ikey));
+                } else {
+                    D_RW (hashtable_)->Get (ikey);
+                }
             }
             thread->stats.FinishedBatchOp (j);
         }
@@ -804,9 +809,9 @@ public:
 
     void DualCCEH1 (ThreadState* thread) {
         uint64_t batch = FLAGS_batch;
-        if (FLAGS_ins_num != 2) {
-            perror ("The # of CCEH instance must be 2 \n");
-        }
+        // if (FLAGS_ins_num != 2) {
+        //     perror ("The # of CCEH instance must be 2 \n");
+        // }
         if (key_trace_ == nullptr) {
             perror ("DoWrite lack key_trace_ initialization.");
             return;
@@ -829,9 +834,9 @@ public:
                 size_t ikey = key_iterator.Next ();
                 if (thread->tid < nthread) {
                     bool mp0 = false;
-                    // if (thread->ycsb_gen.NextG () == kYCSB_Write) {
-                    // if (thread->ycsb_gen.NextH () == kYCSB_Write) {
-                    if (1) {
+                    if (false && thread->ycsb_gen.NextG () == kYCSB_Write) {
+                        // if (thread->ycsb_gen.NextH () == kYCSB_Write) {
+                        // if (1) {
                         mp0 = D_RW (hashtable0_)
                                   ->Insert (pop0_, ikey, reinterpret_cast<Value_t> (ikey));
                     } else {
@@ -854,7 +859,6 @@ public:
             }
             // check every 10,000 ops
             bool timOrOps = thread->stats.FinishedBatchOp (j);
-            // if (!timOrOps) {
             if (thread->tid < nthread) {  // 0
                 totalMinorCompaction0_.fetch_add (thread->privateStates.getLastIncrease (),
                                                   std::memory_order_relaxed);
@@ -879,7 +883,6 @@ public:
                 uint32_t gap1 = MC1 - totalMinorCompaction1;
                 totalMinorCompaction0 = MC0;
                 totalMinorCompaction1 = MC1;
-                // printf ("gap0 = %u, gap1 = %u \n", gap0, gap1);
                 // TODO : ACTION
                 if (validBufferFlag) {
                     if (gap0 > gap1 * 1.4) {  // increase 0 buffer
@@ -891,25 +894,37 @@ public:
                     }
                 }
             }
-            // }
 
             if (validBufferFlag) {
-                int32_t hashb0 = D_RW (hashtable0_)->balance.load (std::memory_order_relaxed);
-                if (hashb0 < 0) {
-                    int32_t vb0 = validBuffer.fetch_sub (1, std::memory_order_relaxed);
-                    if (vb0 > 0) {
-                        D_RW (hashtable0_)->increaseBuffer ();
-                    } else {
-                        validBuffer.fetch_add (1, std::memory_order_relaxed);
+                while (validBuffer.load (std::memory_order_relaxed) > 0) {
+                    // printf ("%d, %u, %u \n", validBuffer.load (std::memory_order_relaxed),
+                    //         D_RW (hashtable0_)->bufferConfig.noBufferIndexSet->size (),
+                    //         D_RW (hashtable1_)->bufferConfig.noBufferIndexSet->size ());
+                    int32_t hashb0 = D_RW (hashtable0_)->balance.load (std::memory_order_relaxed);
+                    if (hashb0 < 0) {
+                        int32_t vb0 = validBuffer.fetch_sub (1, std::memory_order_relaxed);
+                        if (vb0 > 0) {
+                            bool ret = D_RW (hashtable0_)->increaseBuffer ();
+                            if (!ret) {
+                                validBuffer.fetch_add (1, std::memory_order_relaxed);
+                                break;
+                            }
+                        } else {
+                            validBuffer.fetch_add (1, std::memory_order_relaxed);
+                        }
                     }
-                }
-                int32_t hashb1 = D_RW (hashtable1_)->balance.load (std::memory_order_relaxed);
-                if (hashb1 < 0) {
-                    int32_t vb1 = validBuffer.fetch_sub (1, std::memory_order_relaxed);
-                    if (vb1 > 0) {
-                        D_RW (hashtable1_)->increaseBuffer ();
-                    } else {
-                        validBuffer.fetch_add (1, std::memory_order_relaxed);
+                    int32_t hashb1 = D_RW (hashtable1_)->balance.load (std::memory_order_relaxed);
+                    if (hashb1 < 0) {
+                        int32_t vb1 = validBuffer.fetch_sub (1, std::memory_order_relaxed);
+                        if (vb1 > 0) {
+                            bool ret = D_RW (hashtable1_)->increaseBuffer ();
+                            if (!ret) {
+                                validBuffer.fetch_add (1, std::memory_order_relaxed);
+                                break;
+                            }
+                        } else {
+                            validBuffer.fetch_add (1, std::memory_order_relaxed);
+                        }
                     }
                 }
             }
@@ -923,17 +938,22 @@ public:
                 int32_t vb = validBuffer.load (std::memory_order_relaxed);
                 // printf ("cceh0=%u cceh1=%u total=%u|b0=%d b1=%d valid=%d, %d\n", h0, h1, h0 + h1,
                 //         b0, b1, vb, validBufferFlag);
+                // printf ("bis %u, %u, %u, %u \n",
+                //         D_RW (hashtable0_)->bufferConfig.bufferIndexSet->size (),
+                //         D_RW (hashtable0_)->bufferConfig.noBufferIndexSet->size (),
+                //         D_RW (hashtable1_)->bufferConfig.noBufferIndexSet->size (),
+                //         D_RW (hashtable1_)->bufferConfig.bufferIndexSet->size ());
+                // printf ("cur seg %u, %u\n",
+                //         D_RW (hashtable0_)->curSegnumNum.load (std::memory_order_relaxed),
+                //         D_RW (hashtable1_)->curSegnumNum.load (std::memory_order_relaxed));
 
                 printf ("%u,%u,%u\n", h0, h1, h0 + h1);
-                // D_RW (hashtable1_)->BufferCheck ();
             }
         }
         thread->stats.real_finish_ = NowMicros ();
         if (thread->tid > 7) {
             uint32_t cnt = releaseCount1_.fetch_add (1, std::memory_order_relaxed);
-            // printf ("cnt = %d \n", cnt);
             if (cnt == 7) {
-                // printf ("??");
                 // D_RW (hashtable1_)->releaseAllBuffers ();
                 int32_t numbuf = D_RW (hashtable1_)->curBufferNum.load (std::memory_order_relaxed);
                 D_RW (hashtable1_)->curBufferNum.store (0);

@@ -4,6 +4,7 @@
 #include <libpmemobj.h>
 #include <pthread.h>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <vector>
@@ -153,12 +154,14 @@ struct Directory {
         depth = kDefaultDepth;
         capacity = pow (2, depth);
         sema = 0;
+        // printf ("Directory double \n");
     }
 
     void initDirectory (size_t _depth) {
         depth = _depth;
         capacity = pow (2, _depth);
         sema = 0;
+        // printf ("Directory double \n");
     }
 };
 

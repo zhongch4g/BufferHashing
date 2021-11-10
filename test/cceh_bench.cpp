@@ -111,18 +111,17 @@ public:
         int64_t usecs_since_last = now - last_report_finish_;
 
         std::string cur_time = TimeToString (now / 1000000);
-        printf (
-            "%s ... thread %d: (%lu,%lu) ops and "
-            "( %.1f,%.1f ) ops/second in (%.4f,%.4f) seconds\n",
-            cur_time.c_str (), tid_, done_ - last_report_done_, done_,
-            (done_ - last_report_done_) / (usecs_since_last / 1000000.0),
-            done_ / ((now - start_) / 1000000.0), (now - last_report_finish_) / 1000000.0,
-            (now - start_) / 1000000.0);
+        // printf (
+        //     "%s ... thread %d: (%lu,%lu) ops and "
+        //     "( %.1f,%.1f ) ops/second in (%.4f,%.4f) seconds\n",
+        //     cur_time.c_str (), tid_, last_report_done_, done_,
+        //     (done_ - last_report_done_) / (usecs_since_last / 1000000.0),
+        //     done_ / ((now - start_) / 1000000.0), (now - last_report_finish_) / 1000000.0,
+        //     (now - start_) / 1000000.0);
 
         // each epoch speed
-        // printf ("%d,%lu,%lu,%.4f,%.4f\n", tid_, last_report_done_, done_,
-        //         usecs_since_last / 1000000.0,
-        //         (done_ - last_report_done_) / (usecs_since_last / 1000000.0) / 1024 / 1024);
+        printf ("TIME|%d,%lu,%lu,%.4f,%.4f\n", tid_, last_report_done_, done_,
+                usecs_since_last / 1000000.0, (now - start_) / 1000000.0);
         last_report_finish_ = now;
         last_report_done_ = done_;
         fflush (stdout);
@@ -138,7 +137,7 @@ public:
 
     void AddMessage (const std::string& msg) { AppendWithSpace (&message_, msg); }
 
-    inline void FinishedBatchOp (size_t batch) {
+    inline bool FinishedBatchOp (size_t batch) {
         double now = NowNanos ();
         last_op_finish_ = now;
         done_ += batch;
@@ -161,16 +160,18 @@ public:
 
             if (FLAGS_report_interval == 0 && (done_ % FLAGS_stats_interval) == 0) {
                 PrintSpeed ();
-                return;
+                return true;
             }
             fflush (stderr);
             fflush (stdout);
         }
 
-        if (FLAGS_report_interval != 0 && NowNanos () > next_report_time_) {
+        if (FLAGS_report_interval && NowMicros () > next_report_time_) {
             next_report_time_ += FLAGS_report_interval * 1000000;
             PrintSpeed ();
+            return false;
         }
+        return true;
     }
 
     inline void FinishedSingleOp () {
@@ -234,7 +235,7 @@ public:
 
         double elapsed = (finish_ - start_) * 1e-6;
 
-        double throughput = (double)done_ / elapsed;
+        // double throughput = (double)done_ / elapsed;
 
         // The throughput data for none buffer cceh
         // printf ("%-12s : %11.3f micros/op %lf Mops/s;%s%s\n", name.ToString ().c_str (),
@@ -247,9 +248,6 @@ public:
             fprintf (stdout, "Nanoseconds per op:\n%s\n", hist_.ToString ().c_str ());
         }
 
-        // FILE *fp;
-        // fp = fopen("result-8k/8k-buffer.txt","a");
-        // fprintf(fp,"%lf\n",throughput / 1024 / 1024);
         fflush (stdout);
         fflush (stderr);
     }
@@ -275,6 +273,19 @@ struct SharedState {
         : total (total), num_initialized (0), num_done (0), start (false), middle_step_done (0) {}
 };
 
+class PrivateStates {
+public:
+    PrivateStates () : lastMinorCompactions (0), minorCompactions (0) {}
+    uint32_t getMinorCompactions () { return minorCompactions; }
+    uint32_t getLastIncrease () { return minorCompactions - lastMinorCompactions; }
+    void setLastMinorCompactions () { lastMinorCompactions = minorCompactions; }
+    void fetchMinorCompactions (uint32_t num) { minorCompactions += num; }
+
+private:
+    uint32_t lastMinorCompactions;
+    uint32_t minorCompactions;
+};
+
 // Per-thread state for concurrent executions of the same benchmark.
 struct ThreadState {
     int tid;  // 0..n-1 when running in n threads
@@ -282,6 +293,7 @@ struct ThreadState {
     Stats stats;
     SharedState* shared;
     YCSBGenerator ycsb_gen;
+    PrivateStates privateStates;
     ThreadState (int index) : tid (index), stats (index) {}
 };
 
@@ -839,7 +851,7 @@ public:
             uint64_t j = 0;
             for (; j < batch && key_iterator.Valid (); j++) {
                 size_t key = key_iterator.Next ();
-                if (thread->ycsb_gen.NextB () == kYCSB_Write) {
+                if (false && thread->ycsb_gen.NextG () == kYCSB_Write) {
                     D_RW (hashtable_)->Insert (pop_, key, reinterpret_cast<Value_t> (key));
                     insert++;
                 } else {
