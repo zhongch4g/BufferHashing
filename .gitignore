@@ -1,6 +1,7 @@
 **/debug
 **/release
 result*/
-CCEH/
+CCEH/src/*.txt
+CCEH/src/*.log
 **/buffer-impact/
 *.log

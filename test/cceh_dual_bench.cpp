@@ -747,8 +747,8 @@ public:
             for (; j < batch && key_iterator.Valid (); j++) {
                 inserted++;
                 size_t ikey = key_iterator.Next ();
-                if (false && thread->ycsb_gen.NextG () == kYCSB_Write) {
-                    // if (1) {
+                // if (false && thread->ycsb_gen.NextG () == kYCSB_Write) {
+                if (1) {
                     D_RW (hashtable_)->Insert (pop_, ikey, reinterpret_cast<Value_t> (ikey));
                 } else {
                     D_RW (hashtable_)->Get (ikey);

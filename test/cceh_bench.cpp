@@ -18,7 +18,7 @@
 #include <thread>  // std::thread
 #include <vector>
 
-#include "CCEH_BUF.h"
+#include "CCEH_buflog.h"
 #include "cceh_util.h"
 #include "histogram.h"
 
@@ -43,10 +43,6 @@ DEFINE_uint64 (read, 0, "Number of read operations");
 DEFINE_uint64 (write, 1 * 1000000, "Number of read operations");
 DEFINE_bool (hist, false, "");
 DEFINE_string (benchmarks, "load,readall", "");
-DEFINE_uint32 (writeThreads, 1,
-               "For readwhilewriting, determine how many write threads out of 16 threads.");
-DEFINE_double (bufferRate, 0.1, "");
-DEFINE_int32 (bufferNum, -1, "");
 
 namespace {
 
@@ -361,7 +357,6 @@ public:
     size_t reads_;
     size_t writes_;
     RandomKeyTrace* key_trace_;
-    RandomKeyTrace* preload_key_trace_;
     size_t trace_size_;
     PMEMobjpool* pop_;
     PMEMobjpool* pop0_;
@@ -378,7 +373,6 @@ public:
           reads_ (FLAGS_read),
           writes_ (FLAGS_write),
           key_trace_ (nullptr),
-          preload_key_trace_ (nullptr),
           hashtable_ (OID_NULL) {
         remove (FLAGS_filepath.c_str ());  // delete the mapped file.
         pop_ = pmemobj_create (FLAGS_filepath.c_str (), "CCEH", POOL_SIZE, 0666);
@@ -398,7 +392,6 @@ public:
     void Run () {
         trace_size_ = FLAGS_num;
         key_trace_ = new RandomKeyTrace (trace_size_);  // a 1 dim trace_size_ long vector
-        preload_key_trace_ = new RandomKeyTrace (trace_size_ / 2 / 2);
         if (reads_ == 0) {
             reads_ = key_trace_->count_;
             FLAGS_read = key_trace_->count_;
@@ -621,7 +614,7 @@ public:
         }
 
         // Only one of the thread is writing
-        if (thread->tid > FLAGS_writeThreads - 1) {
+        if (thread->tid > 0) {
             DoRead (thread);
         } else {
             uint64_t batch = FLAGS_batch;

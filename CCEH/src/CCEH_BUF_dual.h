@@ -175,14 +175,14 @@ struct Directory {
         capacity = pow (2, depth);
         sema = 0;
         // INFO ("Directory capacity: %lu. depth %lu\n", capacity, depth);
-        printf ("Directory capacity: %lu. depth %lu\n", capacity, depth);
+        // printf ("Directory capacity: %lu. depth %lu\n", capacity, depth);
     }
 
     void initDirectory (size_t _depth) {
         depth = _depth;
         capacity = pow (2, _depth);
         // INFO ("Directory capacity: %lu. depth %lu\n", capacity, depth);
-        printf ("Directory capacity: %lu. depth %lu\n", capacity, depth);
+        // printf ("Directory capacity: %lu. depth %lu\n", capacity, depth);
         sema = 0;
     }
 };

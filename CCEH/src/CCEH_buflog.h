@@ -10,8 +10,8 @@
 #include <vector>
 
 #include "../../src/buflog.h"
-#include "util.h"
 #include "logger.h"
+#include "util.h"
 
 #define TOID_ARRAY(x) TOID (x)
 
@@ -41,7 +41,7 @@ constexpr size_t kSegmentBits = 8;
 constexpr size_t kMask = (1 << kSegmentBits) - 1;
 constexpr size_t kShift = kSegmentBits;
 constexpr size_t kSegmentSize = (1 << kSegmentBits) * 16 * 4;
-constexpr size_t kWriteBufferSize = kSegmentSize / 2 / 256;
+constexpr size_t kWriteBufferSize = kSegmentSize / 2 / 256 * (1 + 0.3);
 constexpr size_t kNumPairPerCacheLine = 4;
 constexpr size_t kNumCacheLine = 8;
 constexpr size_t kCuckooThreshold = 16;

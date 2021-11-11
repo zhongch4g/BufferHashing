@@ -223,6 +223,7 @@ void CCEH::initCCEH (PMEMobjpool* pop) {
 void CCEH::initCCEH (PMEMobjpool* pop, size_t initCap) {
     crashed = true;
     POBJ_ALLOC (pop, &dir, struct Directory, sizeof (struct Directory), NULL, NULL);
+    printf ("Initialize the directory \n");
     D_RW (dir)->initDirectory (static_cast<size_t> (log2 (initCap)));
     POBJ_ALLOC (pop, &D_RW (dir)->segment, TOID (struct Segment),
                 sizeof (TOID (struct Segment)) * D_RO (dir)->capacity, NULL, NULL);

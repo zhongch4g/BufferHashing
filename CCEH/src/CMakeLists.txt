@@ -8,6 +8,8 @@ set(CCEH_SRCS
     # "CCEH_BUF_Exchange.h"
     "CCEH_BUF_dual.cpp"
     "CCEH_BUF_dual.h"
+    # "CCEH_buflog_dist.cpp"
+    # "CCEH_buflog_dist.h"
 )
 
 # Declare the library
