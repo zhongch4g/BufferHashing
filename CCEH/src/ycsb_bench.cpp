@@ -792,15 +792,15 @@ public:
         size_t interval = num_ / FLAGS_thread;
         size_t start_offset = thread->tid * interval;
         auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
-        // printf("thread %2d, between %lu - %lu\n", thread->tid, start_offset, start_offset +
-        // interval);
+        printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+                start_offset + interval);
         thread->stats.Start ();
 
         while (key_iterator.Valid ()) {
             uint64_t j = 0;
             for (; j < batch && key_iterator.Valid (); j++) {
                 size_t key = key_iterator.Next ();
-                if (thread->ycsb_gen.NextG () == kYCSB_Write) {
+                if (false && thread->ycsb_gen.NextG () == kYCSB_Write) {
                     D_RW (hashtable_)->Insert (pop_, key, reinterpret_cast<Value_t> (key));
                     insert++;
                 } else {
