@@ -65,6 +65,9 @@ public:
     void setKBufNumMax (int32_t kBufNumMax) { kBufNumMax_ = kBufNumMax; }
     void fetchAddKBufNumMax (int32_t num) { kBufNumMax_ += num; }
     void fetchSubKBufNumMax (int32_t num) { kBufNumMax_ -= num; }
+    void setNumSplit (int32_t n) { kNumSplit = n; }
+    void fetchAddNumSplit (int32_t n) { kNumSplit += n; }
+    int32_t getNumSplit () { return kNumSplit; }
 
     int32_t getBufferSizeFactor () { return bufferSizeFactor_; }
     int32_t getKBufNumMax () { return kBufNumMax_; }
@@ -72,6 +75,7 @@ public:
 private:
     int32_t bufferSizeFactor_;
     int32_t kBufNumMax_;
+    int32_t kNumSplit;
 };
 
 struct Segment {
@@ -208,7 +212,7 @@ public:
     void Recovery (PMEMobjpool*);
 
     bool crashed = true;
-
+    void transferBuffer (void);
     void BufferCheck (void);
     bool increaseBuffer (void);
     void releaseAllBuffers (void);

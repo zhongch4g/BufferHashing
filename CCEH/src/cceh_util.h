@@ -9,6 +9,7 @@
 #include <random>
 #include <regex>
 #include <vector>
+#include "trace.h"
 
 std::string Execute (const std::string& cmd) {
     std::array<char, 128> buffer;
@@ -312,8 +313,10 @@ public:
     RandomKeyTrace (size_t count, int seed = random ()) {
         count_ = count;
         keys_.resize (count);
+        traces = new kv::TraceExponential (345, 50, 80000000);
         for (size_t i = 0; i < count; i++) {
-            keys_[i] = i;
+            keys_[i] = traces->Next ();
+            // keys_[i] = i;
         }
         Randomize ();
     }
@@ -390,6 +393,7 @@ public:
 
     size_t count_;
     std::vector<size_t> keys_;
+    kv::Trace* traces;
 };
 
 enum YCSBOpType { kYCSB_Write, kYCSB_Read, kYCSB_Query, kYCSB_ReadModifyWrite };
@@ -451,16 +455,41 @@ public:
         }
     }
 
-    inline YCSBOpType NextG () {
+    inline YCSBOpType NextG (int32_t choice) {
         // ycsbb: 5% reads, 95% writes
         // 51/1024 = 0.0498
         uint32_t rnd_num = wyhash32 ();
+        int32_t partial = NULL;
 
-        if ((rnd_num & 1023) < 818) {
+        switch (choice) {
+            case 0:
+                partial = 0;
+                break;
+            case 1:
+                partial = 205;
+                break;
+            case 2:
+                partial = 409;
+                break;
+            case 3:
+                partial = 614;
+                break;
+            case 4:
+                partial = 818;
+                break;
+            case 5:
+                partial = 1024;
+                break;
+            default:
+                break;
+        }
+
+        if ((rnd_num & 1023) < partial) {
             return kYCSB_Read;
         } else {
             return kYCSB_Write;
         }
+
         // 10% reads   (rnd_num & 1023) < 102 0.0997
         // 20% reads   (rnd_num & 1023) < 205 0.20039
         // 30% reads   (rnd_num & 1023) < 307 0.30009
@@ -478,6 +507,19 @@ public:
         uint32_t rnd_num = wyhash32 ();
 
         if ((rnd_num & 0x1) == 0) {
+            return kYCSB_Read;
+        } else {
+            return kYCSB_Write;
+        }
+    }
+
+    inline YCSBOpType NextI () {
+        // ycsbb: 5% reads, 95% writes
+        // 51/1024 = 0.0498
+        uint32_t rnd_num = wyhash32 ();
+        int32_t partial = NULL;
+
+        if ((rnd_num & 1023) < 409) {
             return kYCSB_Read;
         } else {
             return kYCSB_Write;

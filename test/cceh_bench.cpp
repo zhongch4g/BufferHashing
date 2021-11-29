@@ -43,6 +43,7 @@ DEFINE_uint64 (read, 0, "Number of read operations");
 DEFINE_uint64 (write, 1 * 1000000, "Number of read operations");
 DEFINE_bool (hist, false, "");
 DEFINE_string (benchmarks, "load,readall", "");
+DEFINE_int32 (gChoice, 0, "Write Percentage");
 
 namespace {
 
@@ -844,7 +845,7 @@ public:
             uint64_t j = 0;
             for (; j < batch && key_iterator.Valid (); j++) {
                 size_t key = key_iterator.Next ();
-                if (false && thread->ycsb_gen.NextG () == kYCSB_Write) {
+                if (thread->ycsb_gen.NextG (FLAGS_gChoice) == kYCSB_Write) {
                     D_RW (hashtable_)->Insert (pop_, key, reinterpret_cast<Value_t> (key));
                     insert++;
                 } else {
@@ -983,7 +984,7 @@ public:
             uint64_t j = 0;
             for (; j < batch && key_iterator.Valid (); j++) {
                 size_t key = key_iterator.Next ();
-                if (thread->ycsb_gen.NextG () == kYCSB_Write) {
+                if (thread->ycsb_gen.NextG (FLAGS_gChoice) == kYCSB_Write) {
                     D_RW (hashtable_)->Insert (pop_, key, reinterpret_cast<Value_t> (key));
                     insert++;
                 } else {

@@ -45,8 +45,10 @@ DEFINE_bool (hist, false, "");
 DEFINE_string (benchmarks, "load,readall", "");
 DEFINE_int32 (writeThreads, 1,
               "For readwhilewriting, determine how many write threads out of 16 threads.");
-DEFINE_double (bufferRate, 0, "");
 DEFINE_int32 (bufferNum, -1, "");
+DEFINE_int32 (bufferNum0, -1, "");
+DEFINE_int32 (bufferNum1, -1, "");
+DEFINE_int32 (gChoice, 0, "Write Percentage");
 
 namespace {
 
@@ -111,18 +113,17 @@ public:
         int64_t usecs_since_last = now - last_report_finish_;
 
         std::string cur_time = TimeToString (now / 1000000);
-        printf (
-            "%s ... thread %d: (%lu,%lu) ops and "
-            "( %.1f,%.1f ) ops/second in (%.4f,%.4f) seconds\n",
-            cur_time.c_str (), tid_, last_report_done_, done_,
-            (done_ - last_report_done_) / (usecs_since_last / 1000000.0),
-            done_ / ((now - start_) / 1000000.0), (now - last_report_finish_) / 1000000.0,
-            (now - start_) / 1000000.0);
+        // printf (
+        //     "%s ... thread %d: (%lu,%lu) ops and "
+        //     "( %.1f,%.1f ) ops/second in (%.4f,%.4f) seconds\n",
+        //     cur_time.c_str (), tid_, last_report_done_, done_,
+        //     (done_ - last_report_done_) / (usecs_since_last / 1000000.0),
+        //     done_ / ((now - start_) / 1000000.0), (now - last_report_finish_) / 1000000.0,
+        //     (now - start_) / 1000000.0);
 
         // each epoch speed
-        // printf ("%d,%lu,%lu,%.4f,%.4f\n", tid_, last_report_done_, done_,
-        //         usecs_since_last / 1000000.0,
-        //         (done_ - last_report_done_) / (usecs_since_last / 1000000.0) / 1024 / 1024);
+        printf ("TIME|%d,%lu,%lu,%.4f,%.4f\n", tid_, last_report_done_, done_,
+                usecs_since_last / 1000000.0, (now - start_) / 1000000.0);
         last_report_finish_ = now;
         last_report_done_ = done_;
         fflush (stdout);
@@ -362,6 +363,7 @@ public:
     size_t reads_;
     size_t writes_;
     RandomKeyTrace* key_trace_;
+    RandomKeyTrace* key_trace1_;
     RandomKeyTrace* preload_key_trace_;
     size_t trace_size_;
     PMEMobjpool* pop_;
@@ -401,10 +403,7 @@ public:
         hashtable_ = POBJ_ROOT (pop_, CCEH);
         // D_RW (hashtable_)->initCCEH (pop_, initialSize);
         printf ("Single CCEH \n");
-        // D_RW (hashtable_)->initCCEH (pop_, initialSize, 4, -1, 0);  // full buffer
-        // D_RW (hashtable_)->initCCEH (pop_, initialSize, 4, 1, 0);  // no buffer
-        // D_RW (hashtable_)->initCCEH (pop_, initialSize, 4, 1, FLAGS_bufferRate);
-        D_RW (hashtable_)->initCCEH (pop_, initialSize, 4, FLAGS_bufferNum, FLAGS_bufferRate);
+        D_RW (hashtable_)->initCCEH (pop_, initialSize, FLAGS_bufferNum);
     }
 
     Benchmark (uint32_t ins_num)
@@ -413,65 +412,47 @@ public:
           reads_ (FLAGS_read),
           writes_ (FLAGS_write),
           key_trace_ (nullptr),
-          preload_key_trace_ (nullptr),
-          hashtable_ (OID_NULL),
+          key_trace1_ (nullptr),
           hashtable0_ (OID_NULL),
           hashtable1_ (OID_NULL),
-          ins_num_ (FLAGS_ins_num),
-          trace_counter_ (0),
-          trace_counter1_ (FLAGS_num / 1000000 / 2),
-          totalMinorCompaction0_ (0),
-          totalMinorCompaction1_ (0),
-          passCounter0_ (0),
-          passCounter1_ (0) {
+          ins_num_ (FLAGS_ins_num) {
         const size_t initialSize = 1024 * FLAGS_initsize;  // 16 million initial
         std::string file_path1 = "/mnt/pmem";
         std::string file_path2 = "/objpool.data";
         std::string file_path;
-        int32_t bufferSizeFactorConfig[] = {4, 4};
-        int32_t kBufNumMaxConfig[] = {50000, 50000};  // set it to -1 means full of buffer
-        double bufferRateConfig[] = {0, 0};  // kbufnum -1 and rate 0 means no buffer at all
 
         file_path = file_path1 + "0" + file_path2;
         printf ("Remove pmem file : %s \n", (file_path).c_str ());
         remove ((file_path).c_str ());
-        pop0_ = pmemobj_create (file_path.c_str (), "CCEH", POOL_SIZE, 0666);
+        pop0_ = pmemobj_create (file_path.c_str (), "CCEH0", POOL_SIZE, 0666);
 
         if (!pop0_) {
             perror ((file_path + "\npmemoj_create 0").c_str ());
             exit (1);
         }
-        vpop_.push_back (pop0_);
         hashtable0_ = POBJ_ROOT (pop0_, CCEH);
-        D_RW (hashtable0_)
-            ->initCCEH (pop0_, initialSize, bufferSizeFactorConfig[0], kBufNumMaxConfig[0],
-                        bufferRateConfig[0]);
-        vhashtable_.push_back (hashtable0_);
+        D_RW (hashtable0_)->initCCEH (pop0_, initialSize, FLAGS_bufferNum0);
 
-        /************************************************************************************/
-        printf ("Separate.. \n");
+        printf ("...................................... \n");
         file_path = file_path1 + "1" + file_path2;
         printf ("Remove pmem file : %s \n", (file_path).c_str ());
         remove ((file_path).c_str ());
-        pop1_ = pmemobj_create (file_path.c_str (), "CCEH", POOL_SIZE, 0666);
+        pop1_ = pmemobj_create (file_path.c_str (), "CCEH1", POOL_SIZE, 0666);
 
         if (!pop1_) {
             perror ((file_path + "\npmemoj_create 1").c_str ());
             exit (1);
         }
-        vpop_.push_back (pop1_);
         hashtable1_ = POBJ_ROOT (pop1_, CCEH);
-        D_RW (hashtable1_)
-            ->initCCEH (pop1_, initialSize, bufferSizeFactorConfig[1], kBufNumMaxConfig[1],
-                        bufferRateConfig[1]);
-        vhashtable_.push_back (hashtable1_);
+        D_RW (hashtable1_)->initCCEH (pop1_, initialSize, FLAGS_bufferNum1);
     }
 
     ~Benchmark () {}
 
     void Run () {
         trace_size_ = FLAGS_num;
-        key_trace_ = new RandomKeyTrace (trace_size_);  // a 1 dim trace_size_ long vector
+        key_trace_ = new RandomKeyTrace (trace_size_);   // a 1 dim trace_size_ long vector
+        key_trace1_ = new RandomKeyTrace (trace_size_);  // a 1 dim trace_size_ long vector
         if (reads_ == 0) {
             reads_ = key_trace_->count_;
             FLAGS_read = key_trace_->count_;
@@ -498,21 +479,11 @@ public:
                 fresh_db = true;
                 method = &Benchmark::DoWrite;
             }
-            if (name == "loadtest") {
+            if (name == "cceh2") {
                 fresh_db = true;
-                method = &Benchmark::DoWriteTest;
-            }
-            if (name == "loadtest2") {
-                fresh_db = true;
-                method = &Benchmark::DoWriteTest2;
-            }
-            if (name == "loadtest3") {
-                fresh_db = true;
-                method = &Benchmark::DoWriteTest3;
-            }
-            if (name == "loadbuf") {
-                fresh_db = true;
-                method = &Benchmark::DoWriteBuf;
+                key_trace_->Randomize ();
+                key_trace1_->Randomize ();
+                method = &Benchmark::cceh2;
             }
             if (name == "loadlat") {
                 fresh_db = true;
@@ -787,381 +758,61 @@ public:
         }
 
         thread->stats.real_finish_ = NowMicros ();
-        sleep (3);
-        if (thread->tid == 0) {
-            D_RW (hashtable_)->checkBufferData ();
-        }
         return;
     }
 
-    /*
-        Limit the execution time.
-        sudo numactl -N 0 ./ccehex_bench --thread=8 --benchmarks=loadtest --num=120000000
-       --ins_num=1 --bufferRate=0 --bufferNum=-1 --report_interval=10 --batch=10000
-    */
-    void DoWriteTest (ThreadState* thread) {
+    void cceh2 (ThreadState* thread) {
         uint64_t batch = FLAGS_batch;
+        if (FLAGS_ins_num != 2) {
+            perror ("The # of CCEH instance must be 2 \n");
+        }
         if (key_trace_ == nullptr) {
             perror ("DoWrite lack key_trace_ initialization.");
             return;
         }
-        // size_t interval = num_ / FLAGS_thread;
-        size_t interval = 1000000;  // cut the trace to num_/1M parts
-        size_t start_offset = trace_counter_.load (std::memory_order_relaxed) * interval;
-        trace_counter_.fetch_add (1, std::memory_order_relaxed);
-        auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
-        // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
-        //         start_offset + interval);
-        thread->stats.Start ();
-        std::string val (value_size_, 'v');
-        size_t inserted = 0;
-        while (key_iterator.Valid ()) {
-            uint64_t j = 0;
-            for (; j < batch && key_iterator.Valid (); j++) {
-                inserted++;
-                size_t ikey = key_iterator.Next ();
-                bool mp = D_RW (hashtable_)->Insert (pop_, ikey, reinterpret_cast<Value_t> (ikey));
-                if (mp) {
-                    thread->privateStates.fetchMinorCompactions (1);
-                }
-                uint32_t cur_counter = trace_counter_.load (std::memory_order_relaxed);
-                if (!key_iterator.Valid () && cur_counter < (num_ / interval)) {
-                    size_t nstart_offset =
-                        trace_counter_.load (std::memory_order_relaxed) * interval;
-                    if (nstart_offset <= (num_ - interval)) {
-                        key_iterator =
-                            key_trace_->iterate_between (nstart_offset, nstart_offset + interval);
-                        trace_counter_.fetch_add (1, std::memory_order_relaxed);
-                    }
-                }
-            }
-            bool timOrOps = thread->stats.FinishedBatchOp (j);
-            if (!timOrOps) {
-                printf ("Th : %d Report Minor Compaction %lu \n", thread->tid,
-                        thread->privateStates.getMinorCompactions ());
-            }
-        }
-        thread->stats.real_finish_ = NowMicros ();
-        sleep (10);
-        if (thread->tid == 0) {
-            D_RW (hashtable_)->checkBufferData ();
-        }
-        return;
-    }
-
-    /*
-        2CCEH writes based on the minor compaction rate
-     */
-    void DoWriteTest2 (ThreadState* thread) {
-        uint64_t batch = FLAGS_batch;
-        if (key_trace_ == nullptr) {
-            perror ("DoWrite lack key_trace_ initialization.");
+        if (key_trace1_ == nullptr) {
+            perror ("DoWrite lack key_trace1_ initialization.");
             return;
         }
-        // size_t interval = num_ / FLAGS_thread;
         uint32_t nthread = FLAGS_thread / FLAGS_ins_num;  // 8
-        size_t interval = 1000000;                        // cut the trace to num_/1M parts
+        uint32_t npolicy = thread->tid % nthread;
+        size_t interval = num_ / nthread;  // cut the trace to num_/8 parts
+        size_t start_offset = (thread->tid % nthread) * interval;
 
-        RandomKeyTrace::RangeIterator key_iterator;
-        if (thread->tid / nthread) {  // 1
-            uint32_t start_offset1 = trace_counter1_.load (std::memory_order_relaxed) * interval;
-            trace_counter1_.fetch_add (1, std::memory_order_relaxed);
-            key_iterator = key_trace_->iterate_between (start_offset1, start_offset1 + interval);
-            // printf ("th1 -> %u ---- %u \n", start_offset1, start_offset1 + interval);
-        } else {  // 0
-            uint32_t start_offset0 = trace_counter_.load (std::memory_order_relaxed) * interval;
-            trace_counter_.fetch_add (1, std::memory_order_relaxed);
-            key_iterator = key_trace_->iterate_between (start_offset0, start_offset0 + interval);
-            // printf ("th0 -> %u ---- %u \n", start_offset0, start_offset0 + interval);
-        }
-
-        // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
-        //         start_offset + interval);
-        thread->stats.Start ();
-        size_t inserted = 0;
-        while (key_iterator.Valid ()) {
-            uint64_t j = 0;
-            uint32_t npolicy = thread->tid / nthread;
-            for (; j < batch && key_iterator.Valid (); j++) {
-                inserted++;
-                size_t ikey = key_iterator.Next ();
-
-                if (npolicy == 0) {
-                    bool mp0 =
-                        D_RW (hashtable0_)->Insert (pop0_, ikey, reinterpret_cast<Value_t> (ikey));
-                    if (mp0) {
-                        thread->privateStates.fetchMinorCompactions (1);
-                    }
-                    uint32_t cur_counter = trace_counter_.load (std::memory_order_relaxed);
-                    if (!key_iterator.Valid () && cur_counter < ((num_ / interval) / 2)) {
-                        size_t nstart_offset =
-                            trace_counter_.load (std::memory_order_relaxed) * interval;
-                        if (nstart_offset <= ((num_ / 2) - interval)) {
-                            key_iterator = key_trace_->iterate_between (nstart_offset,
-                                                                        nstart_offset + interval);
-                            // printf ("th %d -> %u ---- %u \n", thread->tid, nstart_offset,
-                            //         nstart_offset + interval);
-                            trace_counter_.fetch_add (1, std::memory_order_relaxed);
-                        }
-                    }
-                } else if (npolicy == 1) {
-                    bool mp1 =
-                        D_RW (hashtable1_)->Insert (pop1_, ikey, reinterpret_cast<Value_t> (ikey));
-                    if (mp1) {
-                        thread->privateStates.fetchMinorCompactions (1);
-                    }
-                    uint32_t cur_counter1 = trace_counter1_.load (std::memory_order_relaxed);
-                    if (!key_iterator.Valid () && cur_counter1 < (num_ / interval)) {
-                        size_t nstart_offset1 =
-                            trace_counter1_.load (std::memory_order_relaxed) * interval;
-                        if (nstart_offset1 <= (num_ - interval)) {
-                            key_iterator = key_trace_->iterate_between (nstart_offset1,
-                                                                        nstart_offset1 + interval);
-                            // printf ("th %d -> %u ---- %u \n", thread->tid, nstart_offset1,
-                            //         nstart_offset1 + interval);
-                            trace_counter1_.fetch_add (1, std::memory_order_relaxed);
-                        }
-                    }
-                } else {
-                    perror ("threads distribute error . \n");
-                    exit (1);
-                }
-            }
-            bool timOrOps = thread->stats.FinishedBatchOp (j);
-            if (thread->tid == 0) D_RW (hashtable0_)->checkBufferData ();
-            // if (!timOrOps) {
-            //     // printf ("Th : %d Report Minor Compaction %lu \n", thread->tid,
-            //     //         thread->privateStates.getLastIncrease ());
-            //     if (npolicy == 0) {
-            //         passCounter0_.fetch_add (1);
-            //         totalMinorCompaction0_.fetch_add (thread->privateStates.getLastIncrease (),
-            //                                           std::memory_order_relaxed);
-            //     }
-            //     if (npolicy == 1) {
-            //         passCounter1_.fetch_add (1);
-            //         totalMinorCompaction1_.fetch_add (thread->privateStates.getLastIncrease (),
-            //                                           std::memory_order_relaxed);
-            //     }
-            //     // printf ("MC0 = %u, MC1 = %u \n", totalMinorCompaction0_,
-            //     totalMinorCompaction1_); thread->privateStates.setLastMinorCompactions ();
-            // }
-
-            // // release the buffer to public
-            // if (passCounter0_.load (std::memory_order_relaxed) == nthread &&
-            //     passCounter1_.load (std::memory_order_relaxed) == nthread) {
-            //     passCounter0_.store (0);
-            //     passCounter1_.store (0);
-            //     if (totalMinorCompaction0_.load (std::memory_order_relaxed) >
-            //         totalMinorCompaction1_.load (std::memory_order_relaxed)) {  // increase 0
-            //         buffer bool relFlag = D_RW (hashtable1_)->releaseBuffer (pop1_); if (relFlag)
-            //         {
-            //             D_RW (hashtable0_)->addBuffer ();
-            //         }
-            //     } else {
-            //         bool relFlag = D_RW (hashtable0_)->releaseBuffer (pop0_);
-            //         if (relFlag) {
-            //             D_RW (hashtable1_)->addBuffer ();
-            //         }
-            //     }
-            //     printf ("h0->%u, h1->%u\n", D_RW (hashtable0_)->bufferConfig.getKBufNumMax (),
-            //             D_RW (hashtable1_)->bufferConfig.getKBufNumMax ());
-            //     D_RW (hashtable0_)->checkBufferData ();
-            //     totalMinorCompaction0_.store (0);
-            //     totalMinorCompaction1_.store (0);
-            // }
-        }
-        thread->stats.real_finish_ = NowMicros ();
-        sleep (3);
-        if (thread->tid == 0) {
-            printf ("CCEH0:");
-            printf ("buffer max: %u\n", D_RW (hashtable0_)->bufferConfig.getKBufNumMax ());
-            D_RW (hashtable0_)->checkBufferData ();
-        }
-        if (thread->tid == 1) {
-            printf ("CCEH1:");
-            printf ("buffer max: %u\n", D_RW (hashtable1_)->bufferConfig.getKBufNumMax ());
-            D_RW (hashtable1_)->checkBufferData ();
-        }
-        return;
-    }
-
-    void DoWriteTest3 (ThreadState* thread) {
-        printf ("Do test 3 \n");
-        uint64_t batch = FLAGS_batch;
-        if (key_trace_ == nullptr) {
-            perror ("DoWrite lack key_trace_ initialization.");
-            return;
-        }
-        // size_t interval = num_ / FLAGS_thread;
-        uint32_t nthread = FLAGS_thread / FLAGS_ins_num;  // 8
-        uint32_t npolicy = thread->tid / nthread;
-        size_t interval = 1000000;  // cut the trace to num_/1M parts
-
-        RandomKeyTrace::RangeIterator key_iterator;
-        if (thread->tid / nthread) {  // 1
-            uint32_t start_offset1 = trace_counter1_.load (std::memory_order_relaxed) * interval;
-            trace_counter1_.fetch_add (1, std::memory_order_relaxed);
-            key_iterator = key_trace_->iterate_between (start_offset1, start_offset1 + interval);
-            // printf ("th1 -> %u ---- %u \n", start_offset1, start_offset1 + interval);
-        } else {  // 0
-            uint32_t start_offset0 = trace_counter_.load (std::memory_order_relaxed) * interval;
-            trace_counter_.fetch_add (1, std::memory_order_relaxed);
-            key_iterator = key_trace_->iterate_between (start_offset0, start_offset0 + interval);
-            // printf ("th0 -> %u ---- %u \n", start_offset0, start_offset0 + interval);
-        }
-
-        thread->stats.Start ();
-        while (key_iterator.Valid ()) {
-            uint64_t j = 0;
-            for (; j < batch && key_iterator.Valid (); j++) {
-                size_t ikey = key_iterator.Next ();
-                if (npolicy == 0) {
-                    bool mp0 = false;
-                    // if (thread->ycsb_gen.NextG () == kYCSB_Write) {
-                    if (1) {
-                        mp0 = D_RW (hashtable0_)
-                                  ->Insert (pop0_, ikey, reinterpret_cast<Value_t> (ikey));
+        if (thread->tid < nthread) {
+            auto key_iterator0 =
+                key_trace_->iterate_between (start_offset, start_offset + interval);
+            printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+                    start_offset + interval);
+            thread->stats.Start ();
+            while (key_iterator0.Valid ()) {
+                uint64_t j = 0;
+                for (; j < batch && key_iterator0.Valid (); j++) {
+                    size_t key = key_iterator0.Next ();
+                    if (thread->ycsb_gen.NextG (FLAGS_gChoice) == kYCSB_Write) {
+                        // if (true) {
+                        D_RW (hashtable0_)->Insert (pop0_, key, reinterpret_cast<Value_t> (key));
                     } else {
-                        D_RW (hashtable0_)->Get (ikey);
+                        D_RW (hashtable0_)->Get (key);
                     }
-                    if (mp0) {
-                        thread->privateStates.fetchMinorCompactions (1);
-                    }
-
-                    uint32_t cur_counter = trace_counter_.load (std::memory_order_relaxed);
-                    if (!key_iterator.Valid () && cur_counter < ((num_ / interval) / 2)) {
-                        size_t nstart_offset =
-                            trace_counter_.load (std::memory_order_relaxed) * interval;
-                        if (nstart_offset <= ((num_ / 2) - interval)) {
-                            key_iterator = key_trace_->iterate_between (nstart_offset,
-                                                                        nstart_offset + interval);
-                            // printf ("th %d -> %u ---- %u \n", thread->tid, nstart_offset,
-                            //         nstart_offset + interval);
-                            trace_counter_.fetch_add (1, std::memory_order_relaxed);
-                        }
-                    }
-
-                } else if (npolicy == 1) {
-                    bool mp1 =
-                        D_RW (hashtable1_)->Insert (pop1_, ikey, reinterpret_cast<Value_t> (ikey));
-                    if (mp1) {
-                        thread->privateStates.fetchMinorCompactions (1);
-                    }
-                    uint32_t cur_counter1 = trace_counter1_.load (std::memory_order_relaxed);
-                    if (!key_iterator.Valid () && cur_counter1 < (num_ / interval)) {
-                        size_t nstart_offset1 =
-                            trace_counter1_.load (std::memory_order_relaxed) * interval;
-                        if (nstart_offset1 <= (num_ - interval)) {
-                            key_iterator = key_trace_->iterate_between (nstart_offset1,
-                                                                        nstart_offset1 + interval);
-                            // printf ("th %d -> %u ---- %u \n", thread->tid, nstart_offset1,
-                            //         nstart_offset1 + interval);
-                            trace_counter1_.fetch_add (1, std::memory_order_relaxed);
-                        }
-                    }
-                } else {
-                    perror ("threads distribute error . \n");
-                    exit (1);
                 }
+                bool ops = thread->stats.FinishedBatchOp (j);
             }
-            bool timOrOps = thread->stats.FinishedBatchOp (j);
-            if (!timOrOps) {
-                // printf ("Th : %d Report Minor Compaction %lu \n", thread->tid,
-                //         thread->privateStates.getLastIncrease ());
-                if (npolicy == 0) {
-                    passCounter0_.fetch_add (1);
-                    totalMinorCompaction0_.fetch_add (thread->privateStates.getLastIncrease (),
-                                                      std::memory_order_relaxed);
+        } else {
+            auto key_iterator1 =
+                key_trace1_->iterate_between (start_offset, start_offset + interval);
+            printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+                    start_offset + interval);
+            thread->stats.Start ();
+
+            while (key_iterator1.Valid ()) {
+                uint64_t j = 0;
+                for (; j < batch && key_iterator1.Valid (); j++) {
+                    size_t key = key_iterator1.Next ();
+                    D_RW (hashtable1_)->Insert (pop1_, key, reinterpret_cast<Value_t> (key));
                 }
-                if (npolicy == 1) {
-                    passCounter1_.fetch_add (1);
-                    totalMinorCompaction1_.fetch_add (thread->privateStates.getLastIncrease (),
-                                                      std::memory_order_relaxed);
-                }
-                // printf ("MC0 = %u, MC1 = %u \n", totalMinorCompaction0_, totalMinorCompaction1_);
-                thread->privateStates.setLastMinorCompactions ();
+                bool ops = thread->stats.FinishedBatchOp (j);
             }
-            uint32_t passCounter0 = passCounter0_.load (std::memory_order_relaxed);
-            uint32_t passCounter1 = passCounter1_.load (std::memory_order_relaxed);
-
-            // release the buffer to public
-            if (passCounter0 == nthread && passCounter1 == nthread) {
-                passCounter0_.store (0);
-                passCounter1_.store (0);
-                uint32_t totalMinorCompaction0 =
-                    totalMinorCompaction0_.load (std::memory_order_relaxed);
-                uint32_t totalMinorCompaction1 =
-                    totalMinorCompaction1_.load (std::memory_order_relaxed);
-                printf ("MC0->%u, MC1->%u \n", totalMinorCompaction0, totalMinorCompaction1);
-                totalMinorCompaction0_.store (0);
-                totalMinorCompaction1_.store (0);
-                // D_RW (hashtable0_)->checkBufferData ();
-                // D_RW (hashtable1_)->checkBufferData ();
-                if (totalMinorCompaction0 > totalMinorCompaction1) {  // increase 0 buffer
-                    bool relFlag = D_RW (hashtable1_)->releaseBuffer (pop1_);
-                    if (relFlag) {
-                        D_RW (hashtable0_)->addBuffer ();
-                    }
-                } else {
-                    bool relFlag = D_RW (hashtable0_)->releaseBuffer (pop0_);
-                    if (relFlag) {
-                        D_RW (hashtable1_)->addBuffer ();
-                    }
-                }
-                printf ("h0->%u, h1->%u\n", D_RW (hashtable0_)->bufferConfig.getKBufNumMax (),
-                        D_RW (hashtable1_)->bufferConfig.getKBufNumMax ());
-            }
-        }
-        thread->stats.real_finish_ = NowMicros ();
-        sleep (3);
-        if (thread->tid == 0) {
-            printf ("CCEH0:");
-            printf ("buffer max: %u\n", D_RW (hashtable0_)->bufferConfig.getKBufNumMax ());
-            D_RW (hashtable0_)->checkBufferData ();
-        }
-        if (thread->tid == 1) {
-            printf ("CCEH1:");
-            printf ("buffer max: %u\n", D_RW (hashtable1_)->bufferConfig.getKBufNumMax ());
-            D_RW (hashtable1_)->checkBufferData ();
-        }
-        return;
-    }
-
-    void DoWriteBuf (ThreadState* thread) {
-        uint64_t batch = FLAGS_batch;
-        if (key_trace_ == nullptr) {
-            // perror ("DoWrite lack key_trace_ initialization.");
-            return;
-        }
-        size_t interval = num_ / FLAGS_thread;
-        size_t start_offset = thread->tid * interval;
-        auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
-
-        thread->stats.Start ();
-        std::string val (value_size_, 'v');
-        size_t inserted = 0;
-        while (key_iterator.Valid ()) {
-            uint64_t j = 0;
-            for (; j < batch && key_iterator.Valid (); j++) {
-                inserted++;
-                size_t ikey = key_iterator.Next ();
-                D_RW (hashtable_)->Insert (pop_, ikey, reinterpret_cast<Value_t> (ikey));
-                if (inserted % 6000000 == 0) {
-                    printf ("current ops: %lu ", inserted);
-                    D_RW (hashtable_)->checkBufferData ();
-                }
-            }
-            thread->stats.FinishedBatchOp (j);
-        }
-
-        thread->stats.real_finish_ = NowMicros ();
-
-        sleep (3);
-        if (thread->tid == 0) {
-            // double alf = D_RW (hashtable_)->AverageBufLoadFactor();
-            // printf("Average Load Factor : %2.2f \n", alf);
-
-            D_RW (hashtable_)->checkBufferData ();
         }
         return;
     }
@@ -1431,7 +1082,7 @@ public:
             uint64_t j = 0;
             for (; j < batch && key_iterator.Valid (); j++) {
                 size_t key = key_iterator.Next ();
-                if (thread->ycsb_gen.NextG () == kYCSB_Write) {
+                if (thread->ycsb_gen.NextG (FLAGS_gChoice) == kYCSB_Write) {
                     D_RW (hashtable_)->Insert (pop_, key, reinterpret_cast<Value_t> (key));
                     insert++;
                 } else {
@@ -1526,17 +1177,6 @@ public:
                 }
             }
             thread->stats.FinishedBatchOp (j);
-        }
-        thread->stats.real_finish_ = NowMicros ();
-        sleep (10);
-        int th = thread->tid;
-        if (th == 0) {
-            printf ("Node 0: \n ");
-            D_RW (hashtable0_)->checkBufferData ();
-        }
-        if (th == 1) {
-            printf ("Node 1: \n ");
-            D_RW (hashtable1_)->checkBufferData ();
         }
 
         return;

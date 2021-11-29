@@ -4,18 +4,19 @@ set(CCEH_SRCS
     # "CCEH_BUF.h"
     # "CCEH_buflog.cpp"
     # "CCEH_buflog.h"
-    # "CCEH_BUF_Exchange.cpp"
-    # "CCEH_BUF_Exchange.h"
-    "CCEH_BUF_dual.cpp"
-    "CCEH_BUF_dual.h"
-    # "CCEH_buflog_dist.cpp"
-    # "CCEH_buflog_dist.h"
+    "CCEH_BUF_Exchange.cpp"
+    "CCEH_BUF_Exchange.h"
+    # "CCEH_BUF_dual.cpp"
+    # "CCEH_BUF_dual.h"
+    "trace.cc"
+    "trace.h"
 )
 
 # Declare the library
 add_library(cceh STATIC
     ${CCEH_SRCS}
 )
+
 
 # add_dependencies(cceh)
 

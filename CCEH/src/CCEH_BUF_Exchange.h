@@ -7,7 +7,7 @@
 #include <cstring>
 #include <mutex>
 #include <set>
-#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <libpmemobj.h>
@@ -55,7 +55,7 @@ constexpr size_t kShift = kSegmentBits;
 constexpr size_t kSegmentSize =
     (1 << kSegmentBits) * 16 * 4;  // 16 Bytes * 4 /per Bucket, 1 << kSegmentBits = 256 Buckets
 // constexpr size_t kWriteBufferSize = kSegmentSize / 2 / 256;
-constexpr size_t kWriteBufferSize = (kSegmentSize / 4 / 256) * (1 + 0.3);  // 4K buffer size
+constexpr size_t kWriteBufferSize = kSegmentSize / 2 / 256 * (1 + 0.3);
 constexpr size_t kNumPairPerCacheLine = 4;
 constexpr size_t kNumCacheLine = 8;  // how many cachelines for linearprobing to search
 constexpr size_t kCuckooThreshold = 16;
@@ -66,89 +66,27 @@ using WriteBuffer = buflog::WriteBuffer<kWriteBufferSize>;
 
 class BufferConfig {
 public:
-    std::mutex _BCF_mtx;
-    std::mutex set_mutex;  // std::lock_guard<std::mutex> lk (set_mutex); add the lock
-    std::set<uint64_t>* bufferContainFlag;
-    std::set<uint64_t>* _bufferContainFlag;
-    std::set<uint64_t>* bufferNotContainFlag;
-    std::set<uint64_t>* _bufferNotContainFlag;
-    uint32_t probDistance = 32;
+    std::unordered_set<uint32_t>* bufferIndexSet;
+    std::unordered_set<uint32_t>* noBufferIndexSet;
+    std::mutex IndexSetLock;
+
     BufferConfig () {}
-
     ~BufferConfig (void) {}
-
     void setBufferSizeFactor (int32_t bufferSizeFactor) { bufferSizeFactor_ = bufferSizeFactor; }
     void setKBufNumMax (int32_t kBufNumMax) { kBufNumMax_ = kBufNumMax; }
     void fetchAddKBufNumMax (int32_t num) { kBufNumMax_ += num; }
     void fetchSubKBufNumMax (int32_t num) { kBufNumMax_ -= num; }
-    void setBufferRate (double bufferRate) { bufferRate_ = bufferRate; }
+    void setNumSplit (int32_t n) { kNumSplit = n; }
+    void fetchAddNumSplit (int32_t n) { kNumSplit += n; }
+    int32_t getNumSplit () { return kNumSplit; }
 
     int32_t getBufferSizeFactor () { return bufferSizeFactor_; }
     int32_t getKBufNumMax () { return kBufNumMax_; }
-    double getBufferRate () { return bufferRate_; }
-
-    void initDirEntryMapping (uint64_t initSize) {
-        currentHashCap = initSize;
-        // Can't del directory, consider other thread is reading ..
-        dirEntryMapping = new uint64_t[initSize];
-        memset (dirEntryMapping, 0, initSize * sizeof (uint64_t));
-    }
-    uint64_t getDirEntryMapping () {
-        // return an entry of dir
-        auto randN = rand ();
-        for (uint32_t i = 0; i < probDistance; i++) {
-            auto loc = (randN + i) % currentHashCap;
-            if (dirEntryMapping[loc] != 0) {
-                // TODO : delete ??
-                return loc;
-            }
-        }
-        return randN % currentHashCap;
-    }
-
-    void setDirEntryMapping (uint64_t index) {
-        for (uint32_t i = 0; i < probDistance; i++) {
-            auto loc = (index + i) % currentHashCap;
-            if (dirEntryMapping[loc] == 0) {
-                dirEntryMapping[loc] = index;
-                return;
-            }
-        }
-        // TODO : Collision
-    }
-
-    void removeDirEntryMapping (uint64_t index) {
-        for (uint32_t i = 0; i < probDistance; i++) {
-            auto loc = (index + i) % currentHashCap;
-            if (dirEntryMapping[loc] == index) {
-                dirEntryMapping[loc] = 0;
-                return;
-            }
-        }
-        // Didn't find the index means there is no entry
-    }
 
 private:
     int32_t bufferSizeFactor_;
     int32_t kBufNumMax_;
-    double bufferRate_;
-
-    uint64_t currentHashCap;
-    uint64_t* dirEntryMapping;
-};
-
-class Timeval {
-public:
-    uint64_t start_;
-    uint64_t end_;
-    uint64_t interval_;
-
-    uint64_t NowMicros () {
-        static constexpr uint64_t kUsecondsPerSecond = 1000000;
-        struct ::timeval tv;
-        ::gettimeofday (&tv, nullptr);
-        return static_cast<uint64_t> (tv.tv_sec) * kUsecondsPerSecond + tv.tv_usec;
-    }
+    int32_t kNumSplit;
 };
 
 struct Segment {
@@ -158,8 +96,8 @@ struct Segment {
     Segment (void) {}
     ~Segment (void) {}
 
-    int initSegment (CCEH*);
-    int initSegment (size_t, CCEH*);
+    bool initSegment (CCEH*);
+    bool initSegment (size_t, CCEH*);
 
     bool suspend (void) {
         int64_t val;
@@ -216,7 +154,6 @@ struct Segment {
     bool bufferDestroy;
 
     CCEH* cceh;
-    Timeval timeval;
 };
 
 struct Directory {
@@ -280,7 +217,7 @@ public:
     ~CCEH (void) {}
     void initCCEH (PMEMobjpool*);
     void initCCEH (PMEMobjpool*, size_t);
-    void initCCEH (PMEMobjpool*, size_t, uint32_t, uint32_t, double);
+    void initCCEH (PMEMobjpool*, size_t, uint32_t);
 
     /* For CCEH BUF */
     // return val indicates whether the insert trigers the minor compaction just now.
@@ -301,19 +238,10 @@ public:
 
     bool crashed = true;
 
-    // record the number of buffer merge to pmem
-    uint32_t bufferWrites;
-
-    // check data in segment
-    void checkBufferData ();
-
-    bool releaseBuffer (PMEMobjpool*);
-    bool addBuffer ();
-
     BufferConfig bufferConfig;
 
     // to limit the number of buffer in use
-    std::atomic<uint32_t> bufnum;
+    std::atomic<uint32_t> curBufferNum;  // to record current # of buffer
     std::atomic<uint32_t> curSegnumNum;
 
 private:

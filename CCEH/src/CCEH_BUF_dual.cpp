@@ -27,7 +27,6 @@ using namespace std;
 
 std::atomic<int32_t> validBuffer (0);
 bool validBufferFlag = false;  // did not finished the initialization
-std::mutex ValidBufferLock;
 
 bool Segment::initSegment (CCEH* _cceh) {
     for (size_t i = 0; i < kNumSlot; ++i) {
@@ -38,7 +37,7 @@ bool Segment::initSegment (CCEH* _cceh) {
     cceh = _cceh;
     bufnode_ = new WriteBuffer ();
     buf_flag = true;
-    return false;
+    return true;
 }
 
 bool Segment::initSegment (size_t depth, CCEH* _cceh) {
@@ -59,8 +58,8 @@ bool Segment::initSegment (size_t depth, CCEH* _cceh) {
             return true;
         } else {
             validBufferFlag = true;
-            validBuffer.fetch_add (std::memory_order_relaxed);
-            // perror ("Finish the initialization of the buffer \n");
+            validBuffer.fetch_add (1, std::memory_order_relaxed);
+            perror ("Finish the initialization of the buffer \n");
         }
     }
     return false;
@@ -261,8 +260,7 @@ void CCEH::initCCEH (PMEMobjpool* pop) {
 }
 
 void CCEH::initCCEH (PMEMobjpool* pop, size_t initCap, uint32_t bufferNum) {
-    bufferConfig.setKBufNumMax (bufferNum);
-    validBuffer.fetch_add (bufferNum);
+    validBuffer.fetch_add (bufferNum, std::memory_order_relaxed);
     bufferConfig.bufferIndexSet = new std::unordered_set<uint32_t> ();
     bufferConfig.noBufferIndexSet = new std::unordered_set<uint32_t> ();
     curBufferNum = 0;
@@ -321,20 +319,12 @@ bool CCEH::increaseBuffer () {
     }
     // 1. find out a segment to increase its buffer
     uint32_t randN = rand () % bufferConfig.noBufferIndexSet->size ();
-    // printf("randN = %u, length = %u, dir = %u \n", randN, bufferConfig.noBufferIndexSet->size
-    // (), D_RO (dir)->capacity); std::set<uint32_t>::iterator itlow =
-    // bufferConfig.noBufferIndexSet->lower_bound (randN); std::set<uint32_t>::iterator it =
-    // bufferConfig.noBufferIndexSet->begin(); std::set<uint32_t>::iterator itlow =
-    // bufferConfig.noBufferIndexSet->lower_bound (*it);
     std::unordered_set<uint32_t>::iterator itlow = bufferConfig.noBufferIndexSet->begin ();
 
     advance (itlow, randN);
     auto target = D_RO (D_RO (dir)->segment)[*itlow];
     auto target_ptr = D_RW (target);
-    // printf("target p = %p\n", target_ptr);
-    // fflush(stdout);
-    // printf("flag = %d \n",target_ptr->buf_flag);
-    // fflush(stdout);
+
     // 2. merge the buffer to segment
     if (target_ptr && !target_ptr->buf_flag) {
         target_ptr->bufnode_ = new WriteBuffer (target_ptr->local_depth);
@@ -351,7 +341,6 @@ bool CCEH::increaseBuffer () {
     } else {
         validBuffer.fetch_add (1, std::memory_order_relaxed);
     }
-    // printf ("finish IB\n");
     bufferConfig.IndexSetLock.unlock ();
     return true;
 }
@@ -376,7 +365,8 @@ retry:
     auto target_ptr = D_RW (target);
     /* to check whether current segment come with buffer or not */
     if (!target_ptr->buf_flag) {
-        insert (pop, key, value, true);
+        // printf ("No buffer.. \n");
+        insert (pop, key, value, false);
         return isMinorCompaction;
     }
 
@@ -533,7 +523,7 @@ DIR_RETRY:
             std::this_thread::yield ();
             goto DIR_RETRY;
         }
-        // printf ("Double dir\n");
+        // printf ("insert::Double dir\n");
 
         x = (f_hash >> (8 * sizeof (f_hash) - D_RO (dir)->depth));
         // auto dir_old = dir;
@@ -747,7 +737,6 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool* pop, WriteBuffer* bufnode, S
 
         auto target_local_depth = D_RO (target)->local_depth;
         // INFO("Split segment %lu. depth %lu, ", x, target_local_depth);
-
         // step 1. Split the dram segment
         Segment* split = old_segment_dram.SplitDram (iter);
         Segment* split_segment_dram = split;
@@ -779,7 +768,7 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool* pop, WriteBuffer* bufnode, S
                 std::this_thread::yield ();
                 goto MERGE_SPLIT_RETRY;
             }
-            // printf ("Double Directory\n");
+            // printf ("Insert::Double Directory\n");
             // INFO ("Double Directory Begin\n");
 
             // begin doubling
@@ -1181,6 +1170,36 @@ void CCEH::Recovery (PMEMobjpool* pop) {
     }
     pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[0],
                      sizeof (TOID (struct Segment)) * D_RO (dir)->capacity);
+}
+
+void CCEH::transferBuffer () {
+    D_RW (dir)->lock ();
+    bufferConfig.IndexSetLock.lock ();
+    // Scan the new directory and construct a new bufferContainFlag
+    for (int i = 0; i < D_RO (dir)->capacity;) {
+        auto target = D_RW (D_RW (dir)->segment)[i];
+        auto target_ptr = D_RW (target);
+        // record the index
+        if (target_ptr && target_ptr->buf_flag) {
+            bufferConfig.bufferIndexSet->insert (i);
+        } else {
+            if (validBuffer.load (std::memory_order_relaxed) <= 1) break;
+            target_ptr->bufnode_ = new WriteBuffer (target_ptr->local_depth);
+            balance.fetch_add (1);
+            curBufferNum.fetch_add (1);
+            bufferConfig.bufferIndexSet->insert (i);
+            bufferConfig.noBufferIndexSet->erase (i);
+            bufferConfig.fetchAddKBufNumMax (1);
+            target_ptr->buf_flag = true;
+            validBuffer.fetch_sub (1, std::memory_order_relaxed);
+        }
+
+        auto tar = D_RO (D_RO (dir)->segment)[i];
+        int stride = pow (2, D_RO (dir)->depth - D_RO (tar)->local_depth);
+        i += stride;
+    }
+    bufferConfig.IndexSetLock.unlock ();
+    D_RW (dir)->unlock ();
 }
 
 double CCEH::Utilization (void) {
