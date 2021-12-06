@@ -30,7 +30,7 @@ using GFLAGS_NAMESPACE::RegisterFlagValidator;
 using GFLAGS_NAMESPACE::SetUsageMessage;
 
 DEFINE_int32 (initsize, 16, "initial capacity in million");
-DEFINE_string (filepath, "/mnt/pmem0/objpool.data", "");
+DEFINE_string (filepath, "/mnt/pmem/objpool.data", "");
 DEFINE_uint32 (batch, 1000000, "report batch");
 DEFINE_uint32 (readtime, 0, "if 0, then we read all keys");
 DEFINE_uint32 (thread, 1, "");
@@ -348,7 +348,7 @@ static std::string TrimSpace (std::string s) {
 
 }  // namespace
 
-#define POOL_SIZE (1073741824L * 50L)  // 100GB
+#define POOL_SIZE (1073741824L * 100L)  // 100GB
 class Benchmark {
 public:
     uint64_t num_;

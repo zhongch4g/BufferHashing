@@ -30,7 +30,7 @@ using GFLAGS_NAMESPACE::RegisterFlagValidator;
 using GFLAGS_NAMESPACE::SetUsageMessage;
 
 DEFINE_int32 (initsize, 16, "initial capacity in million");
-DEFINE_string (filepath, "/mnt/pmem0/objpool.data", "");
+DEFINE_string (filepath, "/mnt/pmem/objpool.data", "");
 DEFINE_uint32 (ins_num, 1, "Number of CCEH instance");
 DEFINE_uint32 (batch, 1000000, "report batch");
 DEFINE_uint32 (readtime, 0, "if 0, then we read all keys");
@@ -170,10 +170,6 @@ public:
             fflush (stdout);
         }
 
-        // if (tid_ == 4) {
-        //     printf ("done : %lu, curtime = %lu, nrt = %2.2f\n", done_, NowMicros (),
-        //             next_report_time_);
-        // }
         if (FLAGS_report_interval && NowMicros () > next_report_time_) {
             next_report_time_ += FLAGS_report_interval * 1000000;
             PrintSpeed ();
@@ -243,14 +239,14 @@ public:
 
         double elapsed = (finish_ - start_) * 1e-6;
 
-        // double throughput = (double)done_ / elapsed;
+        double throughput = (double)done_ / elapsed;
 
         // The throughput data for none buffer cceh
         // printf ("%-12s : %11.3f micros/op %lf Mops/s;%s%s\n", name.ToString ().c_str (),
         //         elapsed * 1e6 / done_, throughput / 1024 / 1024, (extra.empty () ? "" : " "),
         //         extra.c_str ());
 
-        printf ("%llu operations, %2.2f real_elapsed \n", done_, elapsed);
+        printf ("%-12s %llu operations, %2.2f real_elapsed , %2.2f Mops/s\n", name.ToString ().c_str (), done_, elapsed, throughput / 1024 / 1024);
 
         if (print_hist) {
             fprintf (stdout, "Nanoseconds per op:\n%s\n", hist_.ToString ().c_str ());
@@ -386,6 +382,7 @@ public:
     std::atomic<uint32_t> passCounter1_;
     std::atomic<uint32_t> releaseCount0_;
     std::atomic<uint32_t> releaseCount1_;
+    double avg_throughput;
 
     Benchmark ()
         : num_ (FLAGS_num),
@@ -424,32 +421,30 @@ public:
           passCounter0_ (0),
           passCounter1_ (0),
           releaseCount0_ (0),
-          releaseCount1_ (0) {
+          releaseCount1_ (0),
+          avg_throughput (0) {
         const size_t initialSize = 1024 * FLAGS_initsize;  // 16 million initial
-        std::string file_path1 = "/mnt/pmem";
-        std::string file_path2 = "/objpool.data";
-        std::string file_path;
+        std::string file_path0 = "/mnt/pmem/CCEH0.data";
 
-        file_path = file_path1 + "0" + file_path2;
-        printf ("Remove pmem file : %s \n", (file_path).c_str ());
-        remove ((file_path).c_str ());
-        pop0_ = pmemobj_create (file_path.c_str (), "CCEH0", POOL_SIZE, 0666);
+        printf ("Remove pmem file : %s \n", (file_path0).c_str ());
+        remove ((file_path0).c_str ());
+        pop0_ = pmemobj_create (file_path0.c_str (), "CCEH0", POOL_SIZE, 0666);
 
         if (!pop0_) {
-            perror ((file_path + "\npmemoj_create 0").c_str ());
+            perror ((file_path0 + "\npmemoj_create 0").c_str ());
             exit (1);
         }
         hashtable0_ = POBJ_ROOT (pop0_, CCEH);
         D_RW (hashtable0_)->initCCEH (pop0_, initialSize, FLAGS_bufferNum0);
 
         printf ("...................................... \n");
-        file_path = file_path1 + "1" + file_path2;
-        printf ("Remove pmem file : %s \n", (file_path).c_str ());
-        remove ((file_path).c_str ());
-        pop1_ = pmemobj_create (file_path.c_str (), "CCEH1", POOL_SIZE, 0666);
+        std::string file_path1 = "/mnt/pmem/CCEH1.data";
+        printf ("Remove pmem file : %s \n", (file_path1).c_str ());
+        remove ((file_path1).c_str ());
+        pop1_ = pmemobj_create (file_path1.c_str (), "CCEH1", POOL_SIZE, 0666);
 
         if (!pop1_) {
-            perror ((file_path + "\npmemoj_create 1").c_str ());
+            perror ((file_path1 + "\npmemoj_create 1").c_str ());
             exit (1);
         }
         hashtable1_ = POBJ_ROOT (pop1_, CCEH);
@@ -756,13 +751,7 @@ public:
             for (; j < batch && key_iterator.Valid (); j++) {
                 inserted++;
                 size_t ikey = key_iterator.Next ();
-                // if (true || thread->ycsb_gen.NextG () == kYCSB_Write) {
-                if (true) {
-                    // if (false) {
-                    D_RW (hashtable_)->Insert (pop_, ikey, reinterpret_cast<Value_t> (ikey));
-                } else {
-                    D_RW (hashtable_)->Get (ikey);
-                }
+                D_RW (hashtable_)->Insert (pop_, ikey, reinterpret_cast<Value_t> (ikey));
             }
             bool ops = thread->stats.FinishedBatchOp (j);
         }
@@ -832,9 +821,6 @@ public:
         size_t interval = num_ / nthread;            // cut the trace to num_/1M parts
         size_t start_offset = (thread->tid % nthread) * interval;
 
-        // uint32_t write_cnt0 = 0, read_cnt0 = 0;
-        // uint32_t write_cnt1 = 0, read_cnt1 = 0;
-
         RandomKeyTrace::RangeIterator key_iterator;
         if (thread->tid < nthread) {  // 0
             key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
@@ -845,7 +831,8 @@ public:
                 start_offset + interval);
 
         thread->stats.Start ();
-        while (key_iterator.Valid ()) {
+        Duration duration (FLAGS_readtime, reads_);
+        while (!duration.Done(batch) && key_iterator.Valid ()) {
             uint64_t j = 0;
             for (; j < batch && key_iterator.Valid (); j++) {
                 size_t ikey = key_iterator.Next ();
@@ -954,7 +941,7 @@ public:
             }
 
             // execute every 1 secs
-            if (false && thread->tid == 0) {
+            if (thread->tid == 0) {
                 uint32_t h0 = D_RW (hashtable0_)->curBufferNum.load (std::memory_order_relaxed);
                 uint32_t h1 = D_RW (hashtable1_)->curBufferNum.load (std::memory_order_relaxed);
                 int32_t b0 = D_RW (hashtable0_)->balance.load (std::memory_order_relaxed);
@@ -967,10 +954,10 @@ public:
             }
         }
         thread->stats.real_finish_ = NowMicros ();
-        if (thread->tid > 3) {
+        if (thread->tid >= nthread) {
             // printf ("thread->tid = %d \n", thread->tid);
             uint32_t cnt = releaseCount1_.fetch_add (1, std::memory_order_relaxed);
-            if (cnt == 3) {
+            if (cnt == nthread-1) {
                 // D_RW (hashtable1_)->releaseAllBuffers ();
                 int32_t numbuf = D_RW (hashtable1_)->curBufferNum.load (std::memory_order_relaxed);
                 D_RW (hashtable1_)->curBufferNum.store (0);
@@ -982,6 +969,10 @@ public:
                 D_RW (hashtable0_)->transferBuffer ();
             }
         }
+
+        // printf ("Th %d -> Number of Segments | h0 = %u | h1 = %u \n", thread->tid,
+        //         D_RW (hashtable0_)->curSegnumNum.load (std::memory_order_relaxed),
+        //         D_RW (hashtable1_)->curSegnumNum.load (std::memory_order_relaxed));
         return;
     }
 
@@ -1336,7 +1327,7 @@ private:
     void PrintHeader () {
         fprintf (stdout, "------------------------------------------------\n");
         PrintEnvironment ();
-        fprintf (stdout, "HashType:              %s\n", "CCEH buflog");
+        fprintf (stdout, "HashType:              %s\n", "CCEH dual");
         // fprintf (stdout, "Init Capacity:         %lu\n", D_RW (hashtable_)->Capacity ());
         fprintf (stdout, "Entries:               %lu\n", (uint64_t)num_);
         fprintf (stdout, "Trace size:            %lu\n", (uint64_t)trace_size_);

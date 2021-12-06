@@ -30,7 +30,7 @@ using GFLAGS_NAMESPACE::RegisterFlagValidator;
 using GFLAGS_NAMESPACE::SetUsageMessage;
 
 DEFINE_int32 (initsize, 16, "initial capacity in million");
-DEFINE_string (filepath, "/mnt/pmem0/objpool.data", "");
+DEFINE_string (filepath, "/mnt/pmem/objpool.data", "");
 DEFINE_uint32 (ins_num, 1, "Number of CCEH instance");
 DEFINE_uint32 (batch, 1000000, "report batch");
 DEFINE_uint32 (readtime, 0, "if 0, then we read all keys");
@@ -384,7 +384,7 @@ public:
 
         const size_t initialSize = 1024 * FLAGS_initsize;  // 16 million initial
         hashtable_ = POBJ_ROOT (pop_, CCEH);
-        printf ("Single CCEH \n");
+        printf ("CCEH-BUFLOG \n");
         D_RW (hashtable_)->initCCEH (pop_, initialSize);
     }
 
@@ -418,10 +418,6 @@ public:
             if (name == "load") {
                 fresh_db = true;
                 method = &Benchmark::DoWrite;
-            }
-            if (name == "loadbuf") {
-                fresh_db = true;
-                method = &Benchmark::DoWriteBuf;
             }
             if (name == "loadlat") {
                 fresh_db = true;
@@ -673,8 +669,8 @@ public:
         size_t interval = num_ / FLAGS_thread;
         size_t start_offset = thread->tid * interval;
         auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
-        // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
-        //         start_offset + interval);
+        printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+                start_offset + interval);
         thread->stats.Start ();
         std::string val (value_size_, 'v');
         size_t inserted = 0;
@@ -689,32 +685,6 @@ public:
         }
 
         thread->stats.real_finish_ = NowMicros ();
-
-        return;
-    }
-
-    void DoWriteBuf (ThreadState* thread) {
-        uint64_t batch = FLAGS_batch;
-        if (key_trace_ == nullptr) {
-            perror ("DoWrite lack key_trace_ initialization.");
-            return;
-        }
-        size_t interval = num_ / FLAGS_thread;
-        size_t start_offset = thread->tid * interval;
-        auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
-
-        thread->stats.Start ();
-        std::string val (value_size_, 'v');
-        size_t inserted = 0;
-        while (key_iterator.Valid ()) {
-            uint64_t j = 0;
-            for (; j < batch && key_iterator.Valid (); j++) {
-                inserted++;
-                size_t ikey = key_iterator.Next ();
-                D_RW (hashtable_)->Insert (pop_, ikey, reinterpret_cast<Value_t> (ikey));
-            }
-            thread->stats.FinishedBatchOp (j);
-        }
 
         return;
     }

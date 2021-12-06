@@ -366,7 +366,7 @@ retry:
     /* to check whether current segment come with buffer or not */
     if (!target_ptr->buf_flag) {
         // printf ("No buffer.. \n");
-        insert (pop, key, value, false);
+        insert (pop, key, value, true);
         return isMinorCompaction;
     }
 

@@ -30,7 +30,7 @@ using GFLAGS_NAMESPACE::RegisterFlagValidator;
 using GFLAGS_NAMESPACE::SetUsageMessage;
 
 DEFINE_int32 (initsize, 16, "initial capacity in million");
-DEFINE_string (filepath, "/mnt/pmem0/objpool.data", "");
+DEFINE_string (filepath, "/mnt/pmem/objpool.data", "");
 DEFINE_uint32 (ins_num, 1, "Number of CCEH instance");
 DEFINE_uint32 (batch, 1000000, "report batch");
 DEFINE_uint32 (readtime, 0, "if 0, then we read all keys");
@@ -237,14 +237,14 @@ public:
 
         double elapsed = (finish_ - start_) * 1e-6;
 
-        // double throughput = (double)done_ / elapsed;
+        double throughput = (double)done_ / elapsed;
 
         // The throughput data for none buffer cceh
         // printf ("%-12s : %11.3f micros/op %lf Mops/s;%s%s\n", name.ToString ().c_str (),
         //         elapsed * 1e6 / done_, throughput / 1024 / 1024, (extra.empty () ? "" : " "),
         //         extra.c_str ());
 
-        printf ("%llu operations, %2.2f real_elapsed \n", done_, elapsed);
+        printf ("%-12s %llu operations, %2.2f real_elapsed , %2.2f Mops/s\n", name.ToString ().c_str (), done_, elapsed, throughput / 1024 / 1024);
 
         if (print_hist) {
             fprintf (stdout, "Nanoseconds per op:\n%s\n", hist_.ToString ().c_str ());
@@ -364,7 +364,6 @@ public:
     size_t writes_;
     RandomKeyTrace* key_trace_;
     RandomKeyTrace* key_trace1_;
-    RandomKeyTrace* preload_key_trace_;
     size_t trace_size_;
     PMEMobjpool* pop_;
     PMEMobjpool* pop0_;
@@ -381,6 +380,8 @@ public:
     std::atomic<uint32_t> totalMinorCompaction1_;
     std::atomic<uint32_t> passCounter0_;
     std::atomic<uint32_t> passCounter1_;
+    std::atomic<uint32_t> releaseCount_;
+    double avg_throughput;
 
     Benchmark ()
         : num_ (FLAGS_num),
@@ -388,7 +389,6 @@ public:
           reads_ (FLAGS_read),
           writes_ (FLAGS_write),
           key_trace_ (nullptr),
-          preload_key_trace_ (nullptr),
           hashtable_ (OID_NULL),
           trace_counter_ (0),
           trace_counter1_ (FLAGS_num / 10000 / 2) {
@@ -417,30 +417,28 @@ public:
           hashtable1_ (OID_NULL),
           ins_num_ (FLAGS_ins_num) {
         const size_t initialSize = 1024 * FLAGS_initsize;  // 16 million initial
-        std::string file_path1 = "/mnt/pmem";
-        std::string file_path2 = "/objpool.data";
-        std::string file_path;
 
-        file_path = file_path1 + "0" + file_path2;
-        printf ("Remove pmem file : %s \n", (file_path).c_str ());
-        remove ((file_path).c_str ());
-        pop0_ = pmemobj_create (file_path.c_str (), "CCEH0", POOL_SIZE, 0666);
+        std::string file_path0 = "/mnt/pmem/CCEH0.data";
+
+        printf ("Remove pmem file : %s \n", (file_path0).c_str ());
+        remove ((file_path0).c_str ());
+        pop0_ = pmemobj_create (file_path0.c_str (), "CCEH0", POOL_SIZE, 0666);
 
         if (!pop0_) {
-            perror ((file_path + "\npmemoj_create 0").c_str ());
+            perror ((file_path0 + "\npmemoj_create 0").c_str ());
             exit (1);
         }
         hashtable0_ = POBJ_ROOT (pop0_, CCEH);
         D_RW (hashtable0_)->initCCEH (pop0_, initialSize, FLAGS_bufferNum0);
 
         printf ("...................................... \n");
-        file_path = file_path1 + "1" + file_path2;
-        printf ("Remove pmem file : %s \n", (file_path).c_str ());
-        remove ((file_path).c_str ());
-        pop1_ = pmemobj_create (file_path.c_str (), "CCEH1", POOL_SIZE, 0666);
+        std::string file_path1 = "/mnt/pmem/CCEH1.data";
+        printf ("Remove pmem file : %s \n", (file_path1).c_str ());
+        remove ((file_path1).c_str ());
+        pop1_ = pmemobj_create (file_path1.c_str (), "CCEH1", POOL_SIZE, 0666);
 
         if (!pop1_) {
-            perror ((file_path + "\npmemoj_create 1").c_str ());
+            perror ((file_path1 + "\npmemoj_create 1").c_str ());
             exit (1);
         }
         hashtable1_ = POBJ_ROOT (pop1_, CCEH);
@@ -768,52 +766,55 @@ public:
         }
         if (key_trace_ == nullptr) {
             perror ("DoWrite lack key_trace_ initialization.");
-            return;
         }
-        if (key_trace1_ == nullptr) {
-            perror ("DoWrite lack key_trace1_ initialization.");
-            return;
-        }
-        uint32_t nthread = FLAGS_thread / FLAGS_ins_num;  // 8
-        uint32_t npolicy = thread->tid % nthread;
-        size_t interval = num_ / nthread;  // cut the trace to num_/8 parts
+        int nthread = FLAGS_thread / FLAGS_ins_num;  // 4
+        size_t interval = num_ / nthread;            // cut the trace to num_/1M parts
         size_t start_offset = (thread->tid % nthread) * interval;
 
-        if (thread->tid < nthread) {
-            auto key_iterator0 =
-                key_trace_->iterate_between (start_offset, start_offset + interval);
-            printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
-                    start_offset + interval);
-            thread->stats.Start ();
-            while (key_iterator0.Valid ()) {
-                uint64_t j = 0;
-                for (; j < batch && key_iterator0.Valid (); j++) {
-                    size_t key = key_iterator0.Next ();
-                    if (thread->ycsb_gen.NextG (FLAGS_gChoice) == kYCSB_Write) {
-                        // if (true) {
-                        D_RW (hashtable0_)->Insert (pop0_, key, reinterpret_cast<Value_t> (key));
-                    } else {
-                        D_RW (hashtable0_)->Get (key);
-                    }
-                }
-                bool ops = thread->stats.FinishedBatchOp (j);
-            }
-        } else {
-            auto key_iterator1 =
-                key_trace1_->iterate_between (start_offset, start_offset + interval);
-            printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
-                    start_offset + interval);
-            thread->stats.Start ();
-
-            while (key_iterator1.Valid ()) {
-                uint64_t j = 0;
-                for (; j < batch && key_iterator1.Valid (); j++) {
-                    size_t key = key_iterator1.Next ();
-                    D_RW (hashtable1_)->Insert (pop1_, key, reinterpret_cast<Value_t> (key));
-                }
-                bool ops = thread->stats.FinishedBatchOp (j);
-            }
+        RandomKeyTrace::RangeIterator key_iterator;
+        if (thread->tid < nthread) {  // 0
+            key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
+        } else {  // 1
+            key_iterator = key_trace1_->iterate_between (start_offset, start_offset + interval);
         }
+        printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+                start_offset + interval);
+        Duration duration (FLAGS_readtime, reads_);
+        thread->stats.Start ();
+        while (!duration.Done(batch) && key_iterator.Valid ()) {
+            uint64_t j = 0;
+            for (; j < batch && key_iterator.Valid (); j++) {
+                size_t ikey = key_iterator.Next ();
+                if (thread->tid < nthread) {
+                    bool mp0 = false;
+                    if (thread->ycsb_gen.NextG (FLAGS_gChoice) == kYCSB_Write) {
+                        mp0 = D_RW (hashtable0_)
+                                  ->Insert (pop0_, ikey, reinterpret_cast<Value_t> (ikey));
+                    } else {
+                        D_RW (hashtable0_)->Get (ikey);
+                    }
+                    if (mp0) {
+                        thread->privateStates.fetchMinorCompactions (1);
+                    }
+                } else if (thread->tid >= nthread) {
+                    bool mp1 =
+                        D_RW (hashtable1_)->Insert (pop1_, ikey, reinterpret_cast<Value_t> (ikey));
+                    if (mp1) {
+                        thread->privateStates.fetchMinorCompactions (1);
+                    }
+                } else {
+                    perror ("threads distribute error . \n");
+                    exit (1);
+                }
+            }
+            // check every 10,000 ops
+            thread->stats.FinishedBatchOp (j);
+        }
+        thread->stats.real_finish_ = NowMicros ();
+
+        // printf ("Number of Segments | h0 = %u | h1 = %u \n",
+        //         D_RW (hashtable0_)->curSegnumNum.load (std::memory_order_relaxed),
+        //         D_RW (hashtable1_)->curSegnumNum.load (std::memory_order_relaxed));
         return;
     }
 
@@ -1286,7 +1287,7 @@ private:
     void PrintHeader () {
         fprintf (stdout, "------------------------------------------------\n");
         PrintEnvironment ();
-        fprintf (stdout, "HashType:              %s\n", "CCEH buflog");
+        fprintf (stdout, "HashType:              %s\n", "CCEH Fixed Buffer Size");
         // fprintf (stdout, "Init Capacity:         %lu\n", D_RW (hashtable_)->Capacity ());
         fprintf (stdout, "Entries:               %lu\n", (uint64_t)num_);
         fprintf (stdout, "Trace size:            %lu\n", (uint64_t)trace_size_);

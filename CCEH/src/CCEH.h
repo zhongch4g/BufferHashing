@@ -161,7 +161,7 @@ struct Directory {
         depth = _depth;
         capacity = pow (2, _depth);
         sema = 0;
-        // printf ("Directory double \n");
+        printf ("Directory double %u \n", _depth);
     }
 };
 

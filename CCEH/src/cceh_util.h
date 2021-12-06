@@ -313,10 +313,10 @@ public:
     RandomKeyTrace (size_t count, int seed = random ()) {
         count_ = count;
         keys_.resize (count);
-        traces = new kv::TraceExponential (345, 50, 80000000);
+        traces = new kv::TraceExponential (345, 50, 1200000000);
         for (size_t i = 0; i < count; i++) {
-            keys_[i] = traces->Next ();
-            // keys_[i] = i;
+            // keys_[i] = traces->Next ();
+            keys_[i] = i;
         }
         Randomize ();
     }
