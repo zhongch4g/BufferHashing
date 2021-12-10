@@ -61,19 +61,6 @@ bool Segment::initSegment (size_t depth, CCEH* _cceh) {
         }
     }
 
-    // if (!validBufferFlag) {
-    //     int32_t vb = validBuffer.fetch_sub (1, std::memory_order_relaxed);
-    //     if (vb > 0) {
-    //         bufnode_ = new WriteBuffer (depth);
-    //         buf_flag = true;
-    //         cceh->curBufferNum.fetch_add (1, std::memory_order_relaxed);
-    //         return true;
-    //     } else {
-    //         validBufferFlag = true;
-    //         validBuffer.fetch_add (1, std::memory_order_relaxed);
-    //         perror ("Finish the initialization of the buffer \n");
-    //     }
-    // }
     return false;
 }
 
@@ -273,8 +260,6 @@ void CCEH::initCCEH (PMEMobjpool* pop) {
 
 void CCEH::initCCEH (PMEMobjpool* pop, size_t initCap, uint32_t bufferNum) {
     bufferConfig.setKBufNumMax (bufferNum);
-    // bufferConfig.bufferIndexSet = new std::unordered_set<uint32_t> ();
-    // bufferConfig.noBufferIndexSet = new std::unordered_set<uint32_t> ();
     curBufferNum = 0;
     curSegnumNum = 0;
 
@@ -289,11 +274,6 @@ void CCEH::initCCEH (PMEMobjpool* pop, size_t initCap, uint32_t bufferNum) {
                     NULL, NULL);
         bool hasBuffer = D_RW (D_RW (D_RW (dir)->segment)[i])
                              ->initSegment (static_cast<size_t> (log2 (initCap)), this);
-        // if (hasBuffer) {
-        //     bufferConfig.bufferIndexSet->insert (i);
-        // } else {
-        //     bufferConfig.noBufferIndexSet->insert (i);
-        // }
         // add the # of segment
         curSegnumNum.fetch_add (1, std::memory_order_relaxed);
     }
@@ -308,7 +288,6 @@ retry:
     auto target_ptr = D_RW (target);
     /* to check whether current segment come with buffer or not */
     if (!target_ptr->buf_flag) {
-        // printf ("No buffer.. \n");
         insert (pop, key, value, true);
         return isMinorCompaction;
     }

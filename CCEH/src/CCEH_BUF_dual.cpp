@@ -59,7 +59,7 @@ bool Segment::initSegment (size_t depth, CCEH* _cceh) {
         } else {
             validBufferFlag = true;
             validBuffer.fetch_add (1, std::memory_order_relaxed);
-            perror ("Finish the initialization of the buffer \n");
+            // perror ("Finish the initialization of the buffer \n");
         }
     }
     return false;
@@ -365,7 +365,6 @@ retry:
     auto target_ptr = D_RW (target);
     /* to check whether current segment come with buffer or not */
     if (!target_ptr->buf_flag) {
-        // printf ("No buffer.. \n");
         insert (pop, key, value, true);
         return isMinorCompaction;
     }

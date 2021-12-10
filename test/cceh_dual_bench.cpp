@@ -496,6 +496,12 @@ public:
                 key_trace1_->Randomize ();
                 method = &Benchmark::DualCCEH1;
             }
+            if (name == "multicceh") {
+                fresh_db = false;
+                key_trace_->Randomize ();
+                key_trace1_->Randomize ();
+                method = &Benchmark::MultiCCEH;
+            }
             if (name == "loadlat") {
                 fresh_db = true;
                 print_hist = true;
@@ -841,6 +847,7 @@ public:
                     if (thread->ycsb_gen.NextG (FLAGS_gChoice) == kYCSB_Write) {
                         mp0 = D_RW (hashtable0_)
                                   ->Insert (pop0_, ikey, reinterpret_cast<Value_t> (ikey));
+                        printf("cceh0 write \n");
                     } else {
                         D_RW (hashtable0_)->Get (ikey);
                     }
@@ -860,6 +867,7 @@ public:
             }
             // check every 10,000 ops
             bool timOrOps = thread->stats.FinishedBatchOp (j);
+            
             // execute every second
             if (!timOrOps) {
                 if (thread->tid < nthread) {  // 0
@@ -939,19 +947,17 @@ public:
                     }
                 }
             }
-
             // execute every 1 secs
-            if (thread->tid == 0) {
-                uint32_t h0 = D_RW (hashtable0_)->curBufferNum.load (std::memory_order_relaxed);
-                uint32_t h1 = D_RW (hashtable1_)->curBufferNum.load (std::memory_order_relaxed);
-                int32_t b0 = D_RW (hashtable0_)->balance.load (std::memory_order_relaxed);
-                int32_t b1 = D_RW (hashtable1_)->balance.load (std::memory_order_relaxed);
-                int32_t vb = validBuffer.load (std::memory_order_relaxed);
-                // printf ("cceh0=%u cceh1=%u total=%u|b0=%d b1=%d valid=%d, %d\n", h0, h1, h0 +
-                // h1, b0, b1, vb, validBufferFlag);
-
-                printf ("%u,%u,%u\n", h0, h1, h0 + h1);
-            }
+            // if (thread->tid == 0) {
+            //     uint32_t h0 = D_RW (hashtable0_)->curBufferNum.load (std::memory_order_relaxed);
+            //     uint32_t h1 = D_RW (hashtable1_)->curBufferNum.load (std::memory_order_relaxed);
+            //     int32_t b0 = D_RW (hashtable0_)->balance.load (std::memory_order_relaxed);
+            //     int32_t b1 = D_RW (hashtable1_)->balance.load (std::memory_order_relaxed);
+            //     int32_t vb = validBuffer.load (std::memory_order_relaxed);
+            //     // printf ("cceh0=%u cceh1=%u total=%u|b0=%d b1=%d valid=%d, %d\n", h0, h1, h0 +
+            //     // h1, b0, b1, vb, validBufferFlag);
+            //     printf ("%u,%u,%u\n", h0, h1, h0 + h1);
+            // }
         }
         thread->stats.real_finish_ = NowMicros ();
         if (thread->tid >= nthread) {
@@ -973,6 +979,50 @@ public:
         // printf ("Th %d -> Number of Segments | h0 = %u | h1 = %u \n", thread->tid,
         //         D_RW (hashtable0_)->curSegnumNum.load (std::memory_order_relaxed),
         //         D_RW (hashtable1_)->curSegnumNum.load (std::memory_order_relaxed));
+        return;
+    }
+
+    void MultiCCEH (ThreadState* thread) {
+        uint64_t batch = FLAGS_batch;
+        if (FLAGS_ins_num != 2) {
+            perror ("The # of CCEH instance must be 2 \n");
+        }
+        if (key_trace_ == nullptr) {
+            perror ("DoWrite lack key_trace_ initialization.");
+        }
+        int nthread = FLAGS_thread / FLAGS_ins_num;  // 4
+        size_t interval = num_ / nthread;            // cut the trace to num_/1M parts
+        size_t start_offset = (thread->tid % nthread) * interval;
+
+        RandomKeyTrace::RangeIterator key_iterator;
+        if (thread->tid < nthread) {  // 0
+            key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
+        } else {  // 1
+            key_iterator = key_trace1_->iterate_between (start_offset, start_offset + interval);
+        }
+        printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+                start_offset + interval);
+
+        thread->stats.Start ();
+        Duration duration (FLAGS_readtime, reads_);
+        while (!duration.Done(batch) && key_iterator.Valid ()) {
+            uint64_t j = 0;
+            for (; j < batch && key_iterator.Valid (); j++) {
+                size_t ikey = key_iterator.Next ();
+                if (thread->tid < nthread) {
+                    D_RW (hashtable0_)->Get (ikey);
+                } else if (thread->tid >= nthread) {
+                    // D_RW (hashtable1_)->Get (ikey);
+                    // D_RW (hashtable1_)->Insert (pop1_, ikey, reinterpret_cast<Value_t> (ikey));
+                } else {
+                    perror ("threads distribute error . \n");
+                    exit (1);
+                }
+            }
+            // check every 10,000 ops
+            bool timOrOps = thread->stats.FinishedBatchOp (j);
+        }
+        thread->stats.real_finish_ = NowMicros ();
         return;
     }
 
@@ -1102,7 +1152,7 @@ public:
             uint64_t j = 0;
             for (; j < batch && key_iterator.Valid (); j++) {
                 size_t key = key_iterator.Next ();
-                if (thread->ycsb_gen.NextB () == kYCSB_Write) {
+                if (thread->ycsb_gen.NextG (FLAGS_gChoice) == kYCSB_Write) {
                     D_RW (hashtable_)->Insert (pop_, key, reinterpret_cast<Value_t> (key));
                     insert++;
                 } else {
@@ -1221,6 +1271,8 @@ public:
         thread->stats.AddMessage (buf);
         return;
     }
+
+    
 
 private:
     struct ThreadArg {

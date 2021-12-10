@@ -483,6 +483,12 @@ public:
                 key_trace1_->Randomize ();
                 method = &Benchmark::cceh2;
             }
+            if (name == "cceh2read") {
+                fresh_db = true;
+                key_trace_->Randomize ();
+                key_trace1_->Randomize ();
+                method = &Benchmark::cceh2read;
+            }
             if (name == "loadlat") {
                 fresh_db = true;
                 print_hist = true;
@@ -815,6 +821,53 @@ public:
         // printf ("Number of Segments | h0 = %u | h1 = %u \n",
         //         D_RW (hashtable0_)->curSegnumNum.load (std::memory_order_relaxed),
         //         D_RW (hashtable1_)->curSegnumNum.load (std::memory_order_relaxed));
+        return;
+    }
+
+    void cceh2read (ThreadState* thread) {
+        uint64_t batch = FLAGS_batch;
+        if (FLAGS_ins_num != 2) {
+            perror ("The # of CCEH instance must be 2 \n");
+        }
+        if (key_trace_ == nullptr) {
+            perror ("DoWrite lack key_trace_ initialization.");
+        }
+        int nthread = FLAGS_thread / FLAGS_ins_num;  // 4
+        size_t interval = num_ / nthread;            // cut the trace to num_/1M parts
+        size_t start_offset = (thread->tid % nthread) * interval;
+
+        RandomKeyTrace::RangeIterator key_iterator;
+        if (thread->tid < nthread) {  // 0
+            key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
+        } else {  // 1
+            key_iterator = key_trace1_->iterate_between (start_offset, start_offset + interval);
+        }
+        printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+                start_offset + interval);
+        Duration duration (FLAGS_readtime, reads_);
+        thread->stats.Start ();
+        while (!duration.Done(batch) && key_iterator.Valid ()) {
+            uint64_t j = 0;
+            for (; j < batch && key_iterator.Valid (); j++) {
+                size_t ikey = key_iterator.Next ();
+                if (thread->tid < nthread) {
+                    D_RW (hashtable0_)->Get (ikey);
+                } else if (thread->tid >= nthread) {
+                    if (thread->ycsb_gen.NextG (FLAGS_gChoice) == kYCSB_Write) {
+                        D_RW (hashtable1_)
+                                  ->Insert (pop1_, ikey, reinterpret_cast<Value_t> (ikey));
+                    } else {
+                        D_RW (hashtable1_)->Get (ikey);
+                    }
+                } else {
+                    perror ("threads distribute error . \n");
+                    exit (1);
+                }
+            }
+            // check every 10,000 ops
+            thread->stats.FinishedBatchOp (j);
+        }
+        thread->stats.real_finish_ = NowMicros ();
         return;
     }
 
