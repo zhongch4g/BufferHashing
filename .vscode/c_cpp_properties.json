@@ -3,9 +3,9 @@
         {
             "name": "Linux",
             "includePath": [
-                "${default}",
                 "${workspaceFolder}/CCEH/src",
-                "${workspaceFolder}/CCEH"
+                "${workspaceFolder}/CCEH",
+                "${default}"
             ],
             "compilerPath": "/usr/bin/clang",
             "cStandard": "c11",

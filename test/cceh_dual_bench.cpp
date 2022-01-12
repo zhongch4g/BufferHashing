@@ -35,7 +35,7 @@ DEFINE_uint32 (ins_num, 1, "Number of CCEH instance");
 DEFINE_uint32 (batch, 1000000, "report batch");
 DEFINE_uint32 (readtime, 0, "if 0, then we read all keys");
 DEFINE_uint32 (thread, 1, "");
-DEFINE_uint64 (report_interval, 0, "Report interval in seconds");
+DEFINE_double (report_interval, 0, "Report interval in seconds");
 DEFINE_uint64 (stats_interval, 1000000, "Report interval in ops");
 DEFINE_uint64 (value_size, 8, "The value size");
 DEFINE_uint64 (num, 10 * 1000000LU, "Number of total record");
@@ -48,6 +48,7 @@ DEFINE_int32 (writeThreads, 1,
 DEFINE_int32 (bufferNum, 1000000, "How many buffer provides?");
 DEFINE_int32 (bufferNum0, 30000, "How many buffer provides?");
 DEFINE_int32 (bufferNum1, 30000, "How many buffer provides?");
+DEFINE_int32 (bufferNum2, 30000, "How many buffer provides?");
 DEFINE_int32 (granularity, 1, "how many buffers transfer?");
 DEFINE_int32 (gChoice, 0, "Write Percentage");
 DEFINE_int32 (zipf, 0, "0 normal, 1 zipf");
@@ -366,22 +367,29 @@ public:
     size_t writes_;
     RandomKeyTrace* key_trace_;
     RandomKeyTrace* key_trace1_;
+    RandomKeyTrace* key_trace2_;
     size_t trace_size_;
     PMEMobjpool* pop_;
     PMEMobjpool* pop0_;
     PMEMobjpool* pop1_;
+    PMEMobjpool* pop2_;
     TOID (CCEH) hashtable_;
     TOID (CCEH) hashtable0_;
     TOID (CCEH) hashtable1_;
+    TOID (CCEH) hashtable2_;
     uint32_t ins_num_;
     std::atomic<uint32_t> totalMinorCompaction0_;
     std::atomic<uint32_t> totalMinorCompaction1_;
+    std::atomic<uint32_t> totalMinorCompaction2_;
     uint32_t totalMinorCompaction0;
     uint32_t totalMinorCompaction1;
+    uint32_t totalMinorCompaction2;
     std::atomic<uint32_t> passCounter0_;
     std::atomic<uint32_t> passCounter1_;
+    std::atomic<uint32_t> passCounter2_;
     std::atomic<uint32_t> releaseCount0_;
     std::atomic<uint32_t> releaseCount1_;
+    std::atomic<uint32_t> releaseCount2_;
     double avg_throughput;
 
     Benchmark ()
@@ -451,12 +459,79 @@ public:
         D_RW (hashtable1_)->initCCEH (pop1_, initialSize, FLAGS_bufferNum1);
     }
 
+    Benchmark (uint32_t ins_num, uint32_t ins_n)
+        : num_ (FLAGS_num),
+          value_size_ (FLAGS_value_size),
+          reads_ (FLAGS_read),
+          writes_ (FLAGS_write),
+          key_trace_ (nullptr),
+          key_trace1_ (nullptr),
+          key_trace2_ (nullptr),
+          hashtable0_ (OID_NULL),
+          hashtable1_ (OID_NULL),
+          hashtable2_ (OID_NULL),
+          ins_num_ (FLAGS_ins_num),
+          totalMinorCompaction0_ (0),
+          totalMinorCompaction1_ (0),
+          totalMinorCompaction2_ (0),
+          totalMinorCompaction0 (0),
+          totalMinorCompaction1 (0),
+          totalMinorCompaction2 (0),
+          passCounter0_ (0),
+          passCounter1_ (0),
+          passCounter2_ (0),
+          releaseCount0_ (0),
+          releaseCount1_ (0),
+          releaseCount2_ (0),
+          avg_throughput (0) {
+        const size_t initialSize = 1024 * FLAGS_initsize;  // 16 million initial
+        std::string file_path0 = "/mnt/pmem/CCEH0.data";
+
+        printf ("Remove pmem file : %s \n", (file_path0).c_str ());
+        remove ((file_path0).c_str ());
+        pop0_ = pmemobj_create (file_path0.c_str (), "CCEH0", POOL_SIZE, 0666);
+
+        if (!pop0_) {
+            perror ((file_path0 + "\npmemoj_create 0").c_str ());
+            exit (1);
+        }
+        hashtable0_ = POBJ_ROOT (pop0_, CCEH);
+        D_RW (hashtable0_)->initCCEH (pop0_, initialSize, FLAGS_bufferNum0);
+
+        printf ("...................................... \n");
+        std::string file_path1 = "/mnt/pmem/CCEH1.data";
+        printf ("Remove pmem file : %s \n", (file_path1).c_str ());
+        remove ((file_path1).c_str ());
+        pop1_ = pmemobj_create (file_path1.c_str (), "CCEH1", POOL_SIZE, 0666);
+
+        if (!pop1_) {
+            perror ((file_path1 + "\npmemoj_create 1").c_str ());
+            exit (1);
+        }
+        hashtable1_ = POBJ_ROOT (pop1_, CCEH);
+        D_RW (hashtable1_)->initCCEH (pop1_, initialSize, FLAGS_bufferNum1);
+
+        printf ("...................................... \n");
+        std::string file_path2 = "/mnt/pmem/CCEH2.data";
+        printf ("Remove pmem file : %s \n", (file_path2).c_str ());
+        remove ((file_path2).c_str ());
+        pop2_ = pmemobj_create (file_path2.c_str (), "CCEH2", POOL_SIZE, 0666);
+
+        if (!pop2_) {
+            perror ((file_path2 + "\npmemoj_create 2").c_str ());
+            exit (1);
+        }
+        hashtable2_ = POBJ_ROOT (pop2_, CCEH);
+        D_RW (hashtable2_)->initCCEH (pop2_, initialSize, FLAGS_bufferNum2);
+    }
+
     ~Benchmark () {}
 
     void Run () {
         trace_size_ = FLAGS_num;
         key_trace_ = new RandomKeyTrace (trace_size_);  // a 1 dim trace_size_ long vector
         key_trace1_ = new RandomKeyTrace (trace_size_);
+        key_trace2_ = new RandomKeyTrace (trace_size_);
 
         if (reads_ == 0) {
             reads_ = key_trace_->count_;
@@ -500,6 +575,7 @@ public:
                 fresh_db = false;
                 key_trace_->Randomize ();
                 key_trace1_->Randomize ();
+                key_trace2_->Randomize ();
                 method = &Benchmark::MultiCCEH;
             }
             if (name == "loadlat") {
@@ -984,21 +1060,26 @@ public:
 
     void MultiCCEH (ThreadState* thread) {
         uint64_t batch = FLAGS_batch;
-        if (FLAGS_ins_num != 2) {
+        if (FLAGS_ins_num != 3) {
             perror ("The # of CCEH instance must be 2 \n");
         }
         if (key_trace_ == nullptr) {
             perror ("DoWrite lack key_trace_ initialization.");
         }
-        int nthread = FLAGS_thread / FLAGS_ins_num;  // 4
-        size_t interval = num_ / nthread;            // cut the trace to num_/1M parts
+        int nthread = FLAGS_thread / FLAGS_ins_num;  // 4 how many threads each CCEH
+        uint32_t interval = num_ / nthread;            // cut the trace to num_/1M parts
         size_t start_offset = (thread->tid % nthread) * interval;
-
+        printf("type %f \n", thread->tid * 1.0 / nthread);
         RandomKeyTrace::RangeIterator key_iterator;
-        if (thread->tid < nthread) {  // 0
+        if (thread->tid / nthread == 0) {  // 0
             key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
-        } else {  // 1
+        } else if (thread->tid / nthread == 1) {  // 1
             key_iterator = key_trace1_->iterate_between (start_offset, start_offset + interval);
+        } else if (thread->tid / nthread == 2) {
+            key_iterator = key_trace2_->iterate_between (start_offset, start_offset + interval);
+        } else {
+            perror ("trace distribute error . \n");
+            exit (1);
         }
         printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
                 start_offset + interval);
@@ -1009,11 +1090,12 @@ public:
             uint64_t j = 0;
             for (; j < batch && key_iterator.Valid (); j++) {
                 size_t ikey = key_iterator.Next ();
-                if (thread->tid < nthread) {
+                if (thread->tid / nthread == 0) {
                     D_RW (hashtable0_)->Get (ikey);
-                } else if (thread->tid >= nthread) {
-                    // D_RW (hashtable1_)->Get (ikey);
-                    // D_RW (hashtable1_)->Insert (pop1_, ikey, reinterpret_cast<Value_t> (ikey));
+                } else if (thread->tid / nthread == 1) {
+                    D_RW (hashtable1_)->Get (ikey);
+                } else if (thread->tid / nthread == 2) {
+                    D_RW (hashtable2_)->Insert (pop2_, ikey, reinterpret_cast<Value_t> (ikey));
                 } else {
                     perror ("threads distribute error . \n");
                     exit (1);
@@ -1021,6 +1103,115 @@ public:
             }
             // check every 10,000 ops
             bool timOrOps = thread->stats.FinishedBatchOp (j);
+
+                        // execute every second
+            if (!timOrOps) {
+                if (thread->tid * 1.0 / nthread == 0) {  // 0
+                    totalMinorCompaction0_.fetch_add (thread->privateStates.getLastIncrease (),
+                                                      std::memory_order_relaxed);
+                    passCounter0_.fetch_add (1);
+                } else if (thread->tid * 1.0 / nthread == 1) {  // 1
+                    totalMinorCompaction1_.fetch_add (thread->privateStates.getLastIncrease (),
+                                                      std::memory_order_relaxed);
+                    passCounter1_.fetch_add (1);
+                } else if (thread->tid * 1.0 / nthread == 2) {
+                    totalMinorCompaction2_.fetch_add (thread->privateStates.getLastIncrease (),
+                                                      std::memory_order_relaxed);
+                    passCounter2_.fetch_add (1);
+                }
+                thread->privateStates.setLastMinorCompactions ();
+                // collect # of minor compaction from all the threads
+                if (passCounter0_.load (std::memory_order_relaxed) > nthread - 1 &&
+                    passCounter1_.load (std::memory_order_relaxed) > nthread - 1 &&
+                    passCounter2_.load (std::memory_order_relaxed) > nthread - 1) {
+                    passCounter0_.fetch_sub (nthread);
+                    passCounter1_.fetch_sub (nthread);
+                    passCounter2_.fetch_sub (nthread);
+
+                    uint32_t MC0 = totalMinorCompaction0_.load (std::memory_order_relaxed);
+                    uint32_t MC1 = totalMinorCompaction1_.load (std::memory_order_relaxed);
+                    uint32_t MC2 = totalMinorCompaction2_.load (std::memory_order_relaxed);
+
+                    uint32_t gap0 = MC0 - totalMinorCompaction0;
+                    uint32_t gap1 = MC1 - totalMinorCompaction1;
+                    uint32_t gap2 = MC2 - totalMinorCompaction2;
+                    totalMinorCompaction0 = MC0;
+                    totalMinorCompaction1 = MC1;
+                    totalMinorCompaction2 = MC2;
+
+                    // TODO : ACTION
+                    if (validBufferFlag) {
+                        // need to use the time that per MC cost 1/gap0??????
+                        double bufferRate0 =
+                            D_RW (hashtable0_)->curBufferNum.load (std::memory_order_relaxed) *
+                            1.0 / D_RW (hashtable0_)->curSegnumNum.load (std::memory_order_relaxed);
+                        double bufferRate1 =
+                            D_RW (hashtable1_)->curBufferNum.load (std::memory_order_relaxed) *
+                            1.0 / D_RW (hashtable1_)->curSegnumNum.load (std::memory_order_relaxed);
+                        double bufferRate2 =
+                            D_RW (hashtable2_)->curBufferNum.load (std::memory_order_relaxed) *
+                            1.0 / D_RW (hashtable2_)->curSegnumNum.load (std::memory_order_relaxed);
+
+                        if (gap0 * bufferRate0 > gap1 * bufferRate1) {  // increase 0 buffer
+                            D_RW (hashtable1_)->balance.fetch_add ((uint32_t) (gap1 * bufferRate1));
+                            D_RW (hashtable0_)->balance.fetch_sub ((uint32_t) (gap1 * bufferRate1));
+                        } else {
+                            D_RW (hashtable0_)->balance.fetch_add ((uint32_t) (gap0 * bufferRate0));
+                            D_RW (hashtable1_)->balance.fetch_sub ((uint32_t) (gap0 * bufferRate0));
+                        } 
+                        if (gap0 * bufferRate0 > gap2 * bufferRate2) {
+                            D_RW (hashtable2_)->balance.fetch_add ((uint32_t) (gap2 * bufferRate2));
+                            D_RW (hashtable0_)->balance.fetch_sub ((uint32_t) (gap2 * bufferRate2));
+                        } else {
+                            D_RW (hashtable0_)->balance.fetch_add ((uint32_t) (gap0 * bufferRate0));
+                            D_RW (hashtable2_)->balance.fetch_sub ((uint32_t) (gap0 * bufferRate0));
+                        } 
+
+                        if (gap1 * bufferRate1 > gap2 * bufferRate2) {
+                            D_RW (hashtable2_)->balance.fetch_add ((uint32_t) (gap2 * bufferRate2));
+                            D_RW (hashtable1_)->balance.fetch_sub ((uint32_t) (gap2 * bufferRate2));
+                        } else {
+                            D_RW (hashtable1_)->balance.fetch_add ((uint32_t) (gap1 * bufferRate1));
+                            D_RW (hashtable2_)->balance.fetch_sub ((uint32_t) (gap1 * bufferRate1));
+                        }
+                    }
+                }
+            }  // execute every second
+
+            if (validBufferFlag) {
+                int32_t limit = 50;
+                if (validBuffer.load (std::memory_order_relaxed) > 0) {
+                    int32_t hashb0 = D_RW (hashtable0_)->balance.load (std::memory_order_relaxed);
+                    if (hashb0 < 0) {
+                        int32_t vb0 = validBuffer.fetch_sub (1, std::memory_order_relaxed);
+                        if (vb0 > 0) {
+                            bool ret = D_RW (hashtable0_)->increaseBuffer ();
+                            if (!ret) {
+                                validBuffer.fetch_add (1, std::memory_order_relaxed);
+                                // break;
+                            }
+                        } else {
+                            validBuffer.fetch_add (1, std::memory_order_relaxed);
+                            // break;
+                        }
+                    }
+                    int32_t hashb1 = D_RW (hashtable1_)->balance.load (std::memory_order_relaxed);
+                    if (hashb1 < 0) {
+                        int32_t vb1 = validBuffer.fetch_sub (1, std::memory_order_relaxed);
+                        if (vb1 > 0) {
+                            bool ret = D_RW (hashtable1_)->increaseBuffer ();
+                            if (!ret) {
+                                validBuffer.fetch_add (1, std::memory_order_relaxed);
+                                // break;
+                            }
+                        } else {
+                            validBuffer.fetch_add (1, std::memory_order_relaxed);
+                            // break;
+                        }
+                    }
+                }
+            }
+            // execute every 1 secs
         }
         thread->stats.real_finish_ = NowMicros ();
         return;
@@ -1402,8 +1593,11 @@ int main (int argc, char* argv[]) {
     if (1 == FLAGS_ins_num) {
         Benchmark benchmark;
         benchmark.Run ();
-    } else {
+    } else if (2 == FLAGS_ins_num) {
         Benchmark benchmark (FLAGS_ins_num);
+        benchmark.Run ();
+    } else {
+        Benchmark benchmark (FLAGS_ins_num, FLAGS_ins_num);
         benchmark.Run ();
     }
     return 0;

@@ -9,9 +9,9 @@
             "type": "cppdbg",
             "request": "launch",
             // "program": "${workspaceFolder}/CCEH-BUFLOG/debug/ccehex_bench",
-            "program": "${workspaceFolder}/debug/ccehex_bench",
+            "program": "${workspaceFolder}/debug/cceh_dual_bench",
             "args": [
-                "--thread=8", "--benchmarks=cceh2", "--num=360000000", "--batch=10000", "--report_interval=1", "--ins_num=2", "--bufferNum0=100000", "--bufferNum1=100000", "--gChoice=2"
+                "--thread=39", "--benchmarks=multicceh", "--num=120000000", "--batch=1000", "--report_interval=0.5", "--ins_num=3", "--bufferNum0=50000", "--bufferNum1=50000", "--bufferNum2=50000"
             ],
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
