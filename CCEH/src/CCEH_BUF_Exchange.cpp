@@ -443,7 +443,7 @@ DIR_RETRY:
             std::this_thread::yield ();
             goto DIR_RETRY;
         }
-        // printf ("insert::Double dir\n");
+        printf ("insert::Double dir\n");
 
         x = (f_hash >> (8 * sizeof (f_hash) - D_RO (dir)->depth));
         // auto dir_old = dir;
@@ -691,7 +691,7 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool* pop, WriteBuffer* bufnode, S
                 std::this_thread::yield ();
                 goto MERGE_SPLIT_RETRY;
             }
-            // printf ("Insert::Double Directory\n");
+            printf ("Insert::Double Directory\n");
             // INFO ("Double Directory Begin\n");
 
             // begin doubling

@@ -1127,7 +1127,7 @@ public:
             uint64_t j = 0;
             for (; j < batch && key_iterator.Valid (); j++) {
                 size_t key = key_iterator.Next ();
-                if (thread->ycsb_gen.NextB () == kYCSB_Write) {
+                if (thread->ycsb_gen.NextG (FLAGS_gChoice) == kYCSB_Write) {
                     D_RW (hashtable_)->Insert (pop_, key, reinterpret_cast<Value_t> (key));
                     insert++;
                 } else {
@@ -1136,6 +1136,10 @@ public:
                 }
             }
             thread->stats.FinishedBatchOp (j);
+            printf("[bufferrate]%u,%u,%2.2f\n", 
+            D_RW (hashtable_)->curBufferNum.load (std::memory_order_relaxed), 
+            D_RW (hashtable_)->curSegnumNum.load (std::memory_order_relaxed),
+            D_RW (hashtable_)->curBufferNum.load (std::memory_order_relaxed)*1.0/D_RW (hashtable_)->curSegnumNum.load (std::memory_order_relaxed));
         }
         char buf[100];
         snprintf (buf, sizeof (buf), "(insert: %lu, read: %lu)", insert, find);
