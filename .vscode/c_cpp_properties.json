@@ -5,7 +5,8 @@
             "includePath": [
                 "${workspaceFolder}/CCEH/src",
                 "${workspaceFolder}/CCEH",
-                "${default}"
+                "${default}",
+                "${workspaceFolder}"
             ],
             "compilerPath": "/usr/bin/clang",
             "cStandard": "c11",

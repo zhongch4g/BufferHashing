@@ -348,7 +348,7 @@ static std::string TrimSpace (std::string s) {
 
 }  // namespace
 
-#define POOL_SIZE (1073741824L * 100L)  // 100GB
+#define POOL_SIZE (1073741824L * 64L)  // 100GB
 class Benchmark {
 public:
     uint64_t num_;
@@ -374,6 +374,7 @@ public:
         }
 
         const size_t initialSize = 1024 * FLAGS_initsize;  // 16 million initial
+        printf("initialsize = %lu\n", initialSize);
         hashtable_ = POBJ_ROOT (pop_, CCEH);
         D_RW (hashtable_)->initCCEH (pop_, initialSize);
     }
@@ -386,7 +387,8 @@ public:
         key_trace_ = new RandomKeyTrace (trace_size_);
         if (reads_ == 0) {
             reads_ = key_trace_->count_;
-            FLAGS_read = key_trace_->count_;
+            // FLAGS_read = key_trace_->count_;
+            printf("reads_ = %lu \n", reads_);
         }
         PrintHeader ();
         bool fresh_db = true;
@@ -478,8 +480,12 @@ public:
             perror ("DoRead lack key_trace_ initialization.");
             return;
         }
-        size_t start_offset = random () % trace_size_;
-        auto key_iterator = key_trace_->trace_at (start_offset, trace_size_);
+        // size_t start_offset = random () % trace_size_;
+        // auto key_iterator = key_trace_->trace_at (start_offset, trace_size_);
+        size_t interval = num_ / FLAGS_thread;
+        size_t start_offset = thread->tid * interval;
+        auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
+        
         size_t not_find = 0;
         uint64_t data_offset;
         Duration duration (FLAGS_readtime, reads_);
@@ -529,8 +535,8 @@ public:
         }
         char buf[100];
         // snprintf (buf, sizeof (buf), "(num: %lu, not find: %lu)", interval, not_find);
-        // if (not_find)
-        //     printf ("thread %2d num: %lu, not find: %lu\n", thread->tid, interval, not_find);
+        if (not_find)
+            printf ("thread %2d num: %lu, not find: %lu\n", thread->tid, interval, not_find);
         thread->stats.AddMessage (buf);
     }
 
@@ -540,8 +546,12 @@ public:
             perror ("DoRead lack key_trace_ initialization.");
             return;
         }
-        size_t start_offset = random () % trace_size_;
-        auto key_iterator = key_trace_->trace_at (start_offset, trace_size_);
+        // size_t start_offset = random () % trace_size_;
+        // auto key_iterator = key_trace_->trace_at (start_offset, trace_size_);
+        size_t interval = num_ / FLAGS_thread;
+        size_t start_offset = thread->tid * interval;
+        auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
+        
         size_t not_find = 0;
         uint64_t data_offset;
         Duration duration (FLAGS_readtime, reads_);
@@ -862,7 +872,7 @@ public:
         auto key_iterator =
             key_trace_->iterate_between (start_offset + 0.8 * interval, start_offset + interval);
         printf ("thread %2d, between %lu - %lu\n", thread->tid,
-                (size_t) (start_offset + 0.8 * interval), start_offset + interval);
+                (size_t)(start_offset + 0.8 * interval), start_offset + interval);
         thread->stats.Start ();
 
         while (key_iterator.Valid ()) {

@@ -10,13 +10,12 @@
 #include <vector>
 
 #include "../../src/buflog.h"
-#include "logger.h"
 #include "util.h"
 
 #define TOID_ARRAY(x) TOID (x)
 
 typedef size_t Key_t;
-typedef const char* Value_t;
+typedef const char *Value_t;
 
 const Key_t SENTINEL = -2;
 const Key_t INVALID = -1;
@@ -41,7 +40,7 @@ constexpr size_t kSegmentBits = 8;
 constexpr size_t kMask = (1 << kSegmentBits) - 1;
 constexpr size_t kShift = kSegmentBits;
 constexpr size_t kSegmentSize = (1 << kSegmentBits) * 16 * 4;
-constexpr size_t kWriteBufferSize = kSegmentSize / 2 / 256 * (1 + 0.3);
+constexpr size_t kWriteBufferSize = (kSegmentSize / 2 / 256) * (1 + 0.3);
 constexpr size_t kNumPairPerCacheLine = 4;
 constexpr size_t kNumCacheLine = 8;
 constexpr size_t kCuckooThreshold = 16;
@@ -56,7 +55,7 @@ struct Segment {
     ~Segment (void) {}
 
     void initSegment (void) {
-        for (size_t i = 0; i < kNumSlot; ++i) {
+        for (int i = 0; i < kNumSlot; ++i) {
             bucket[i].key = INVALID;
         }
         local_depth = 0;
@@ -65,7 +64,7 @@ struct Segment {
     }
 
     void initSegment (size_t depth) {
-        for (size_t i = 0; i < kNumSlot; ++i) {
+        for (int i = 0; i < kNumSlot; ++i) {
             bucket[i].key = INVALID;
         }
         local_depth = depth;
@@ -103,19 +102,19 @@ struct Segment {
         }
     }
 
-    int Insert (PMEMobjpool*, Key_t&, Value_t, size_t, size_t);
-    bool Insert4split (Key_t&, Value_t, size_t);
-    TOID (struct Segment) * Split (PMEMobjpool*);
-    struct Segment* SplitDram (WriteBuffer::Iterator& iter);
+    int Insert (PMEMobjpool *, Key_t &, Value_t, size_t, size_t);
+    bool Insert4split (Key_t &, Value_t, size_t);
+    TOID (struct Segment) * Split (PMEMobjpool *);
+    struct Segment *SplitDram (WriteBuffer::Iterator &iter);
     std::vector<std::pair<size_t, size_t>> find_path (size_t, size_t);
-    void execute_path (PMEMobjpool*, std::vector<std::pair<size_t, size_t>>&, Key_t&, Value_t);
-    void execute_path (std::vector<std::pair<size_t, size_t>>&, Pair);
+    void execute_path (PMEMobjpool *, std::vector<std::pair<size_t, size_t>> &, Key_t &, Value_t);
+    void execute_path (std::vector<std::pair<size_t, size_t>> &, Pair);
     size_t numElement (void);
 
     Pair bucket[kNumSlot];
     int64_t sema = 0;
     size_t local_depth;
-    WriteBuffer* bufnode_;
+    WriteBuffer *bufnode_;
 };
 
 struct Directory {
@@ -163,14 +162,12 @@ struct Directory {
         depth = kDefaultDepth;
         capacity = pow (2, depth);
         sema = 0;
-        INFO ("Directory capacity: %lu. depth %lu\n", capacity, depth);
         printf ("Directory capacity: %lu. depth %lu\n", capacity, depth);
     }
 
     void initDirectory (size_t _depth) {
         depth = _depth;
         capacity = pow (2, _depth);
-        INFO ("Directory capacity: %lu. depth %lu\n", capacity, depth);
         printf ("Directory capacity: %lu. depth %lu\n", capacity, depth);
         sema = 0;
     }
@@ -180,22 +177,22 @@ class CCEH {
 public:
     CCEH (void) {}
     ~CCEH (void) {}
-    void initCCEH (PMEMobjpool*);
-    void initCCEH (PMEMobjpool*, size_t);
+    void initCCEH (PMEMobjpool *);
+    void initCCEH (PMEMobjpool *, size_t);
 
-    void Insert (PMEMobjpool*, Key_t&, Value_t);
-    void insert (PMEMobjpool*, Key_t&, Value_t, bool with_lock);
-    void mergeBufAndSplitWhenNeeded (PMEMobjpool*, WriteBuffer* bufnode, Segment_toid& target,
+    void Insert (PMEMobjpool *, Key_t &, Value_t);
+    void insert (PMEMobjpool *, Key_t &, Value_t, bool with_lock);
+    void mergeBufAndSplitWhenNeeded (PMEMobjpool *, WriteBuffer *bufnode, Segment_toid &target,
                                      size_t x);
-    bool InsertOnly (PMEMobjpool*, Key_t&, Value_t);
-    bool Delete (Key_t&);
-    Value_t Get (Key_t&);
-    Value_t get (Key_t&);
-    Value_t FindAnyway (Key_t&);
+    bool InsertOnly (PMEMobjpool *, Key_t &, Value_t);
+    bool Delete (Key_t &);
+    Value_t Get (Key_t &);
+    Value_t get (Key_t &);
+    Value_t FindAnyway (Key_t &);
 
     double Utilization (void);
     size_t Capacity (void);
-    void Recovery (PMEMobjpool*);
+    void Recovery (PMEMobjpool *);
 
     bool crashed = true;
 

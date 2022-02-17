@@ -1,0 +1,62 @@
+CCEH-BUFLOG 
+Directory capacity: 16384. depth 14
+Randomize the trace...[32mStart IPMWatcher for load
+[0mthread 13, between 111428564 - 119999992
+thread  6, between 51428568 - 59999996
+thread 12, between 102857136 - 111428564
+thread  8, between 68571424 - 77142852
+thread 11, between 94285708 - 102857136
+thread  7, between 59999996 - 68571424
+thread  2, between 17142856 - 25714284
+thread 10, between 85714280 - 94285708
+thread  4, between 34285712 - 42857140
+thread  1, between 8571428 - 17142856
+thread  5, between 42857140 - 51428568
+thread  0, between 0 - 8571428
+thread  3, between 25714284 - 34285712
+thread  9, between 77142852 - 85714280
+Double Directory
+Directory capacity: 32768. depth 15
+Double Directory
+Directory capacity: 65536. depth 16
+Double Directory
+Directory capacity: 131072. depth 17
+Double Directory
+Directory capacity: 262144. depth 18
+119999992 operations, 7.47 real_elapsed 
+dimm_num = 6 
+DIMM0 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |       3689.25 |        2636.01 |    10249.68 |      2714.47 |   2.78 |   1.03 |
+DIMM1 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |       3688.21 |        2636.00 |    10262.01 |      2720.30 |   2.78 |   1.03 |
+DIMM2 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |       3689.91 |        2635.99 |    10237.92 |      2710.60 |   2.77 |   1.03 |
+DIMM3 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |        851.32 |        2606.03 |     1145.65 |      2660.06 |   1.35 |   1.02 |
+DIMM4 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |        851.55 |        2606.01 |     1144.95 |      2661.64 |   1.34 |   1.02 |
+DIMM5 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |        852.45 |        2606.06 |     1139.29 |      2656.24 |   1.34 |   1.02 |
+*SUM* | DIMM-R:  4191.2 MB/s. User-R:  1670.5 MB/s   | DIMM-W:  1977.1 MB/s, User-W:  1928.4 MB/s. Time:   8.15s
+*SUMSUM* | DIMM-R: 34179.5 MB| User-R: 13622.7 MB   | DIMM-W: 16123.3 MB | User-W: 15726.1 MB | Time:   8.15s
+[32mDestroy IPMWatcher.
+[0m
+Randomize the trace...[32mStart IPMWatcher for readrandom
+[0m119999992 operations, 9.82 real_elapsed 
+dimm_num = 6 
+DIMM0 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |       6310.80 |        1848.86 |    17024.75 |      7462.08 |   2.70 |   4.04 |
+DIMM1 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |       6308.19 |        1849.39 |    17022.66 |      7463.38 |   2.70 |   4.04 |
+DIMM2 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |       6325.73 |        1850.01 |    17018.14 |      7454.31 |   2.69 |   4.03 |
+DIMM3 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |       3337.59 |           0.01 |     6562.35 |         9.34 |   1.97 | 630.01 |
+DIMM4 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |       3338.66 |           0.01 |     6563.39 |         9.36 |   1.97 | 628.39 |
+DIMM5 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |       3338.17 |           0.01 |     6561.98 |         9.17 |   1.97 | 615.98 |
+*SUM* | DIMM-R:  6730.7 MB/s. User-R:  2754.9 MB/s   | DIMM-W:  2131.6 MB/s, User-W:   527.8 MB/s. Time:  10.51s
+*SUMSUM* | DIMM-R: 70753.3 MB| User-R: 28959.1 MB   | DIMM-W: 22407.7 MB | User-W:  5548.3 MB | Time:  10.51s
+[32mDestroy IPMWatcher.
+[0m

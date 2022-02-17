@@ -158,6 +158,7 @@ struct Directory {
     }
 
     void initDirectory (size_t _depth) {
+        printf("directory depth = %lu\n", _depth);
         depth = _depth;
         capacity = pow (2, _depth);
         sema = 0;

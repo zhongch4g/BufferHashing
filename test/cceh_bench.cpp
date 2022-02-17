@@ -492,8 +492,12 @@ public:
             perror ("DoRead lack key_trace_ initialization.");
             return;
         }
-        size_t start_offset = random () % trace_size_;
-        auto key_iterator = key_trace_->trace_at (start_offset, trace_size_);
+
+        size_t interval = num_ / FLAGS_thread;
+        size_t start_offset = thread->tid * interval;
+        auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
+        // size_t start_offset = random () % trace_size_;
+        // auto key_iterator = key_trace_->trace_at (start_offset, trace_size_);
         size_t not_find = 0;
 
         Duration duration (FLAGS_readtime, reads_);
@@ -554,8 +558,11 @@ public:
             perror ("DoRead lack key_trace_ initialization.");
             return;
         }
-        size_t start_offset = random () % trace_size_;
-        auto key_iterator = key_trace_->trace_at (start_offset, trace_size_);
+        // size_t start_offset = random () % trace_size_;
+        // auto key_iterator = key_trace_->trace_at (start_offset, trace_size_);
+        size_t interval = num_ / FLAGS_thread;
+        size_t start_offset = thread->tid * interval;
+        auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
         size_t not_find = 0;
 
         Duration duration (FLAGS_readtime, reads_);
@@ -877,7 +884,7 @@ public:
         auto key_iterator =
             key_trace_->iterate_between (start_offset + 0.8 * interval, start_offset + interval);
         printf ("thread %2d, between %lu - %lu\n", thread->tid,
-                (size_t) (start_offset + 0.8 * interval), start_offset + interval);
+                (size_t)(start_offset + 0.8 * interval), start_offset + interval);
         thread->stats.Start ();
 
         while (key_iterator.Valid ()) {

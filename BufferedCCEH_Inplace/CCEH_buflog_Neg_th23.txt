@@ -1,0 +1,71 @@
+CCEH-BUFLOG 
+Directory capacity: 16384. depth 14
+Randomize the trace...[32mStart IPMWatcher for load
+[0mthread  1, between 5217391 - 10434782
+thread  6, between 31304346 - 36521737
+thread 22, between 114782602 - 119999993
+thread 19, between 99130429 - 104347820
+thread 11, between 57391301 - 62608692
+thread 20, between 104347820 - 109565211
+thread  4, between 20869564 - 26086955
+thread 18, between 93913038 - 99130429
+thread 14, between 73043474 - 78260865
+thread  8, between 41739128 - 46956519
+thread 10, between 52173910 - 57391301
+thread 13, between 67826083 - 73043474
+thread  7, between 36521737 - 41739128
+thread  5, between 26086955 - 31304346
+thread 16, between 83478256 - 88695647
+thread 15, between 78260865 - 83478256
+thread 17, between 88695647 - 93913038
+thread 21, between 109565211 - 114782602
+thread  3, between 15652173 - 20869564
+thread 12, between 62608692 - 67826083
+thread  0, between 0 - 5217391
+thread  2, between 10434782 - 15652173
+thread  9, between 46956519 - 52173910
+Double Directory
+Directory capacity: 32768. depth 15
+Double Directory
+Directory capacity: 65536. depth 16
+Double Directory
+Directory capacity: 131072. depth 17
+Double Directory
+Directory capacity: 262144. depth 18
+119999993 operations, 5.52 real_elapsed 
+dimm_num = 6 
+DIMM0 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |       3515.70 |        2629.72 |     9803.68 |      2724.70 |   2.79 |   1.04 |
+DIMM1 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |       3516.22 |        2629.68 |     9823.90 |      2730.43 |   2.79 |   1.04 |
+DIMM2 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |       3515.02 |        2629.67 |     9790.62 |      2719.92 |   2.79 |   1.03 |
+DIMM3 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |        834.93 |        2599.91 |     1098.75 |      2664.97 |   1.32 |   1.03 |
+DIMM4 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |        836.08 |        2599.94 |     1098.62 |      2665.25 |   1.31 |   1.03 |
+DIMM5 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |        836.09 |        2599.95 |     1091.99 |      2660.64 |   1.31 |   1.02 |
+*SUM* | DIMM-R:  5248.3 MB/s. User-R:  2094.7 MB/s   | DIMM-W:  2594.0 MB/s, User-W:  2517.5 MB/s. Time:   6.23s
+*SUMSUM* | DIMM-R: 32707.6 MB| User-R: 13054.0 MB   | DIMM-W: 16165.9 MB | User-W: 15688.9 MB | Time:   6.23s
+[32mDestroy IPMWatcher.
+[0m
+Randomize the trace...[32mStart IPMWatcher for readnon
+[0m119999993 operations, 17.86 real_elapsed 
+dimm_num = 6 
+DIMM0 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      37337.62 |        2264.66 |    54331.28 |      9182.41 |   1.46 |   4.05 |
+DIMM1 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      37384.87 |        2262.73 |    54434.45 |      9210.51 |   1.46 |   4.07 |
+DIMM2 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      37348.47 |        2257.69 |    54300.02 |      9149.60 |   1.45 |   4.05 |
+DIMM3 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      34450.95 |           0.01 |    43284.92 |        24.19 |   1.26 | 1631.29 |
+DIMM4 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      34389.70 |           0.01 |    43214.27 |        24.13 |   1.26 | 1633.37 |
+DIMM5 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      34417.56 |           0.01 |    43247.83 |        23.41 |   1.26 | 1585.09 |
+*SUM* | DIMM-R: 15786.8 MB/s. User-R: 11609.3 MB/s   | DIMM-W:  1488.8 MB/s, User-W:   365.8 MB/s. Time:  18.55s
+*SUMSUM* | DIMM-R: 292812.8 MB| User-R: 215329.2 MB   | DIMM-W: 27614.3 MB | User-W:  6785.1 MB | Time:  18.55s
+[32mDestroy IPMWatcher.
+[0m

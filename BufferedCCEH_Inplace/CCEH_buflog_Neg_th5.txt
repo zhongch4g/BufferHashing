@@ -1,0 +1,73 @@
+CCEH-BUFLOG 
+Directory capacity: 16384. depth 14
+Randomize the trace...[32mStart IPMWatcher for load
+[0mthread  0, between 0 - 24000000
+thread  4, between 96000000 - 120000000
+thread  1, between 24000000 - 48000000
+thread  2, between 48000000 - 72000000
+thread  3, between 72000000 - 96000000
+Double Directory
+Directory capacity: 32768. depth 15
+Double Directory
+Directory capacity: 65536. depth 16
+Double Directory
+Directory capacity: 131072. depth 17
+TIME|3,0,10000000,5.2728,5.2728
+TIME|2,0,10000000,5.2944,5.2944
+TIME|1,0,10000000,5.3459,5.3459
+TIME|4,0,10000000,5.3464,5.3464
+TIME|0,0,10000000,5.4170,5.4170
+Double Directory
+Directory capacity: 262144. depth 18
+TIME|3,10000000,20000000,7.7391,13.0119
+TIME|1,10000000,20000000,7.7018,13.0477
+TIME|2,10000000,20000000,7.7725,13.0669
+TIME|4,10000000,20000000,7.8610,13.2073
+TIME|0,10000000,20000000,7.8777,13.2947
+120000000 operations, 17.76 real_elapsed 
+dimm_num = 6 
+DIMM0 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |       3880.41 |        2628.71 |    10887.19 |      2701.83 |   2.81 |   1.03 |
+DIMM1 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |       3879.84 |        2628.79 |    10897.73 |      2705.59 |   2.81 |   1.03 |
+DIMM2 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |       3880.62 |        2628.83 |    10877.03 |      2698.94 |   2.80 |   1.03 |
+DIMM3 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |        871.56 |        2598.81 |     1247.67 |      2657.04 |   1.43 |   1.02 |
+DIMM4 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |        871.22 |        2598.74 |     1242.17 |      2656.65 |   1.43 |   1.02 |
+DIMM5 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |        872.96 |        2598.73 |     1239.81 |      2651.73 |   1.42 |   1.02 |
+*SUM* | DIMM-R:  1972.1 MB/s. User-R:   772.6 MB/s   | DIMM-W:   871.0 MB/s, User-W:   849.9 MB/s. Time:  18.45s
+*SUMSUM* | DIMM-R: 36391.6 MB| User-R: 14256.6 MB   | DIMM-W: 16071.8 MB | User-W: 15682.6 MB | Time:  18.45s
+[32mDestroy IPMWatcher.
+[0m
+Randomize the trace...[32mStart IPMWatcher for readnon
+[0mTIME|3,0,10000000,22.6106,22.6106
+TIME|1,0,10000000,22.6530,22.6530
+TIME|2,0,10000000,22.6915,22.6915
+TIME|0,0,10000000,22.6922,22.6922
+TIME|4,0,10000000,22.7116,22.7116
+TIME|3,10000000,20000000,22.9908,45.6014
+TIME|1,10000000,20000000,22.9584,45.6114
+TIME|4,10000000,20000000,22.9453,45.6570
+TIME|0,10000000,20000000,23.0370,45.7292
+TIME|2,10000000,20000000,23.0709,45.7624
+120000000 operations, 54.90 real_elapsed 
+dimm_num = 6 
+DIMM0 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      37735.52 |        2306.66 |    54828.14 |      9470.90 |   1.45 |   4.11 |
+DIMM1 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      37723.28 |        2306.99 |    54743.89 |      9387.57 |   1.45 |   4.07 |
+DIMM2 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      37720.00 |        2308.98 |    54953.63 |      9650.24 |   1.46 |   4.18 |
+DIMM3 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      34598.53 |           1.19 |    43174.36 |        53.47 |   1.25 |  44.88 |
+DIMM4 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      34613.31 |           1.20 |    43197.70 |        53.57 |   1.25 |  44.83 |
+DIMM5 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |      34625.84 |           1.17 |    43209.37 |        52.50 |   1.25 |  44.93 |
+*SUM* | DIMM-R:  5290.7 MB/s. User-R:  3903.9 MB/s   | DIMM-W:   515.7 MB/s, User-W:   124.6 MB/s. Time:  55.59s
+*SUMSUM* | DIMM-R: 294107.1 MB| User-R: 217016.5 MB   | DIMM-W: 28668.2 MB | User-W:  6926.2 MB | Time:  55.59s
+[32mDestroy IPMWatcher.
+[0m

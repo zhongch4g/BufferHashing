@@ -1,14 +1,15 @@
 #pragma once
 
 #include <assert.h>
-#include <cstring>
-#include <string>
 
 #include <algorithm>
+#include <cstring>
 #include <fstream>
 #include <random>
 #include <regex>
+#include <string>
 #include <vector>
+
 #include "trace.h"
 
 std::string Execute (const std::string& cmd) {
@@ -315,8 +316,8 @@ public:
         keys_.resize (count);
         traces = new kv::TraceExponential (345, 50, 1200000000);
         for (size_t i = 0; i < count; i++) {
-            keys_[i] = traces->Next ();
-            // keys_[i] = i;
+            // keys_[i] = traces->Next ();
+            keys_[i] = i;
         }
         Randomize ();
     }

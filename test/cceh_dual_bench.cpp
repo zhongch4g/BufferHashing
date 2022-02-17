@@ -28,6 +28,7 @@
 using GFLAGS_NAMESPACE::ParseCommandLineFlags;
 using GFLAGS_NAMESPACE::RegisterFlagValidator;
 using GFLAGS_NAMESPACE::SetUsageMessage;
+using namespace dualcceh;
 
 DEFINE_int32 (initsize, 16, "initial capacity in million");
 DEFINE_string (filepath, "/mnt/pmem/objpool.data", "");

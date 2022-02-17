@@ -3,24 +3,33 @@
 
 #include <immintrin.h>
 #include <inttypes.h>
+#include <unistd.h>
+
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
+#include <iostream>
+#include <libpmemobj++/make_persistent.hpp>
+#include <libpmemobj++/p.hpp>
+#include <libpmemobj++/persistent_ptr.hpp>
+#include <libpmemobj++/pool.hpp>
+#include <libpmemobj++/transaction.hpp>
 #include <string>
 #include <vector>
 
-#include <atomic>
+#include "slice.h"
 
 #define BUFLOG_FLUSH(addr) asm volatile("clwb (%0)" ::"r"(addr))
 #define BUFLOG_FLUSHFENCE asm volatile("sfence" ::: "memory")
 
-// inline void BUFLOG_CLFLUSH(char *data, int len) {
-//   volatile char *ptr = (char *)((unsigned long)data & ~(64 - 1));
-//   for (; ptr < data + len; ptr += 64) {
-//     _mm_clwb((void*)ptr);
-//   }
-// }
+inline void BUFLOG_CLFLUSH (char* data, int len) {
+    volatile char* ptr = (char*)((unsigned long)data & ~(64 - 1));
+    for (; ptr < data + len; ptr += 64) {
+        _mm_clwb ((void*)ptr);
+    }
+}
 
 inline void BUFLOG_COMPILER_FENCE () {
     std::atomic_thread_fence (std::memory_order_release);
@@ -43,6 +52,24 @@ inline std::string print_binary (uint16_t bitmap) {
 inline bool isPowerOfTwo (size_t n) {
     return (n != 0 && (__builtin_popcount (n >> 32) + __builtin_popcount (n & 0xFFFFFFFF)) == 1);
 }
+
+class LogPtr {
+private:
+    union {
+        struct {
+            uint64_t offset : 48;
+            uint64_t id : 16;
+        };
+        pmem::obj::p<uint64_t> data;
+    };
+
+public:
+    void initLogPtr () { data = 256; };
+    void setData (uint64_t tid, uint64_t off) { data = (tid << 48 | off); }
+    uint64_t getOffset () { return offset; }
+    uint64_t getLogId () { return id; }
+    uint64_t getData () { return data; }
+};
 
 // Usage example:
 // BitSet bitset(0x05);
@@ -182,6 +209,366 @@ enum DataLogNodeMetaType : unsigned char {
     kDataLogNodeFail
 };
 
+namespace linkedredolog {
+
+/**
+ *  Format:
+ *  | len | .. data ... |  DataLogNodeMeta |
+ *                      |
+ *            where the next_ point to
+ *  `len` : 1 byte. the size of data
+ *  `data`: any bytes
+ *      any length of record
+ *  `DataLogNodeMeta`: 8 bytes
+ *      type_: 1 byte
+ *      data_size_: 1 byte, the size of data
+ *      next_; 6 byte
+ */
+class DataLogNodeMeta {
+public:
+    inline DataLogNodeMeta* Next (void) { return reinterpret_cast<DataLogNodeMeta*> (_.next_); }
+
+    inline util::Slice Data (void) {
+        return util::Slice ((char*)(this) - _.data_size_, _.data_size_);
+    }
+
+    inline bool Valid (void) {
+        printf ("%lu, %lu, %lu\n", _.data_size_, _.next_, _.type_);
+        return _.type_ < kDataLogNodeFail &&  // type is valid
+               _.type_ >= kDataLogNodeValid;
+    }
+
+    std::string ToString (void) {
+        char buffer[1024];
+        sprintf (buffer, "type: %02d, data size: %u - %s. next off: %lu", _.type_, _.data_size_,
+                 Data ().ToString ().c_str (), _.next_);
+        return buffer;
+    }
+
+    struct {
+        uint64_t type_ : 8;
+        uint64_t data_size_ : 8;
+        uint64_t next_ : 48;
+    } _;
+};
+
+static_assert (sizeof (DataLogNodeMeta) == 8, "DataLogNodeMeta is not 8 byte ");
+
+struct DataLogMeta {
+    uint64_t size_;         // lenght of this log file
+    uint64_t commit_tail_;  // current tail
+    char _none[240];
+
+    std::string ToString () {
+        char buf[128];
+        sprintf (buf, "log size: %ld, cur tail: %ld", size_, commit_tail_);
+        return buf;
+    }
+};
+
+static_assert (sizeof (DataLogMeta) == 256, "size of LogMeta is not 256 byte");
+
+/**
+ *  |  DataLogMeta  | Log data ....
+ *  |   256 byte    |          ...
+ */
+class BufferLogNode {
+public:
+    BufferLogNode () : log_size_ (0), log_size_mask_ (0), log_start_addr_ (nullptr) {
+        log_cur_tail_.get_rw ().store (256);
+    }
+
+    pmem::obj::persistent_ptr<char[]> log;
+    // char* log;
+
+    bool Create (size_t size) {
+        log = pmem::obj::make_persistent<char[]> (size);
+        // log = (char*)malloc (1024 * 1024);
+
+        if (!isPowerOfTwo (size)) {
+            perror ("Data log is not power of 2.");
+            return false;
+        }
+        log_size_ = size;
+        log_size_mask_ = size - 1;
+        log_start_addr_ = log.get ();
+        log_cur_tail_.get_rw ().store (256);
+
+        DataLogMeta* meta = reinterpret_cast<DataLogMeta*> (log.get ());
+        meta->size_ = size;
+        BUFLOG_FLUSH (log.get ());
+        BUFLOG_FLUSHFENCE;
+        return true;
+    }
+
+    void Open () {
+        DataLogMeta* meta = reinterpret_cast<DataLogMeta*> (log.get ());
+        log_size_ = meta->size_;
+        log_size_mask_ = log_size_ - 1;
+        log_start_addr_ = log.get ();
+        // log_cur_tail_.get_rw ().store (meta->commit_tail_);
+        // printf ("Open\n");
+        // char* start = log_start_addr_ + 256 + 17;
+        // uint64_t test = 256 + 17;
+        // uint64_t k = 0;
+        // while (k < 15) {
+        //     printf ("%hhu ", *(uint8_t*)start);
+        //     uint64_t data = *(uint64_t*)start + 2;
+        //     printf ("test %lu data \n", test, data);
+        //     start = start + 27;
+        //     test += 27;
+        //     k++;
+        // }
+    }
+
+    void CommitTail (bool is_pmem) {
+        DataLogMeta* meta = reinterpret_cast<DataLogMeta*> (log_start_addr_);
+        meta->commit_tail_ = log_cur_tail_.get_rw ().load ();
+
+        if (is_pmem) {
+            BUFLOG_FLUSH (meta);
+            BUFLOG_FLUSHFENCE;
+        }
+    }
+
+    inline uint64_t LogTail (void) { return log_cur_tail_.get_rw (); }
+    // append fixed 16 byte kv pair
+    inline size_t Append (DataLogNodeMetaType type, util::Slice entry, uint64_t next,
+                          bool is_pmem) {
+        // int total_size = 1 + 16 + sizeof (DataLogNodeMeta);
+        int total_size = 1 + 16 + 10;
+        size_t off = log_cur_tail_.get_rw ().fetch_add (total_size, std::memory_order_relaxed);
+        char* addr = log_start_addr_ + off;
+
+        //  | len | .. data ... |  DataLogNodeMeta |
+        //  |  1B        len             8B
+        // addr
+        *(uint8_t*)(addr) = 16;
+
+        memcpy (addr + 1, entry.data (), 16);
+
+        *(uint8_t*)(addr + 1 + 16) = type;
+        *(uint8_t*)(addr + 1 + 16 + 1) = 16;
+        *(uint64_t*)(addr + 1 + 16 + 1 + 1) = next;
+
+        if (is_pmem) {
+            BUFLOG_CLFLUSH (addr, total_size);
+        }
+
+        // return start offset of DataLogNodeMeta
+        return off + 1 + 16;
+    }
+
+    // append fixed 16 byte kv pair
+    inline size_t Append (DataLogNodeMetaType type, size_t key, size_t val, uint64_t next,
+                          bool is_pmem) {
+        // int total_size = 1 + 16 + sizeof (DataLogNodeMeta);
+        int total_size = 1 + 16 + 10;
+        size_t off = log_cur_tail_.get_rw ().fetch_add (total_size, std::memory_order_relaxed);
+        char* addr = log_start_addr_ + off;
+
+        //  | len | .. data ... |  DataLogNodeMeta |
+        //  |  1B        len             8B
+        // addr
+        *(uint8_t*)(addr) = 16;
+
+        *(uint64_t*)(addr + 1) = key;
+        *(uint64_t*)(addr + 1 + 8) = val;
+
+        *(uint8_t*)(addr + 1 + 16) = type;
+        *(uint8_t*)(addr + 1 + 16 + 1) = 16;
+        *(uint64_t*)(addr + 1 + 16 + 1 + 1) = next;
+
+        if (is_pmem) {
+            BUFLOG_CLFLUSH (addr, total_size);
+        }
+
+        // return start offset of DataLogNodeMeta
+        return off + 1 + 16;
+    }
+
+    inline bool Valid (uint64_t offset) const {
+        return offset > 256;  // should be larger than the DataLogMeta
+    }
+
+    inline bool IsValidPoint (uint64_t offset) {
+        return offset > 256 && (*(uint8_t*)(log_start_addr_ + offset)) == kDataLogNodeValid;
+    }
+
+    inline uint8_t status (uint64_t offset) { return (*(uint8_t*)(log_start_addr_ + offset)); }
+
+    inline char* currentAddr (uint64_t off) { return log_start_addr_ + off; }
+
+    /**
+     *  An iterator that scan the log from left to right
+     */
+    class SeqIterator {
+    public:
+        SeqIterator (uint64_t front_offset, char* log_start_addr)
+            : front_off_ (front_offset), log_addr_ (log_start_addr) {}
+
+        // Check if the DataLogNode pointed by myself is valid or not
+        inline bool Valid (void) const { return (this)->Valid (); }
+
+        inline uint8_t status () { return *(uint8_t*)(log_addr_ + front_off_); }
+
+        inline uint8_t operator* () const { return this->operator-> (); }
+
+        inline uint8_t operator-> (void) const {
+            return *(uint8_t*)(log_addr_ + front_off_ + 1 + 16);
+        }
+
+        // Prefix ++ overload
+        inline SeqIterator& operator++ () {
+            front_off_ += size ();
+            return *this;
+        }
+
+        // Postfix ++ overload
+        inline SeqIterator operator++ (int) {
+            auto tmp = *this;
+            front_off_ += size ();
+            return tmp;
+        }
+
+    private:
+        // size of the entire LogDataNode
+        inline size_t size (void) {
+            // uint8_t data_size = *reinterpret_cast<uint8_t*> (log_addr_ + front_off_);
+            return 1 + 16 + 10;
+        }
+
+        size_t front_off_;
+        char* log_addr_;
+    };  // end of class SeqIterator
+
+    class ReverseIterator {
+    public:
+        ReverseIterator (uint64_t end_off, char* log_start_addr)
+            : end_off_ (end_off), log_addr_ (log_start_addr) {}
+
+        // Check if the DataLogNode pointed by myself is valid or not
+        inline bool Valid (void) const {
+            return end_off_ > 256;  // should be larger than the DataLogMeta
+        }
+
+        inline DataLogNodeMeta operator* () const { return *this->operator-> (); }
+
+        inline DataLogNodeMeta* operator-> (void) const {
+            DataLogNodeMeta* node_meta = reinterpret_cast<DataLogNodeMeta*> (
+                log_addr_ + end_off_ - sizeof (DataLogNodeMeta));
+            return node_meta;
+        }
+
+        // Prefix -- overload
+        inline ReverseIterator& operator-- () {
+            end_off_ -= NodeSize ();
+            return *this;
+        }
+
+        // Postfix -- overload
+        inline ReverseIterator operator-- (int) {
+            auto tmp = *this;
+            end_off_ -= NodeSize ();
+            return tmp;
+        }
+
+    private:
+        // size of the entire LogDataNode of data log node
+        inline size_t NodeSize (void) {
+            DataLogNodeMeta* node_meta = reinterpret_cast<DataLogNodeMeta*> (
+                log_addr_ + end_off_ - sizeof (DataLogNodeMeta));
+            return 1 + node_meta->_.data_size_ + sizeof (DataLogNodeMeta);
+        }
+        int64_t end_off_;
+        char* log_addr_;
+    };
+
+    class LinkIterator {
+    public:
+        LinkIterator (uint64_t next, char* log_start_addr)
+            : next_off_ (next), log_addr_ (log_start_addr) {}
+
+        inline char* currentAddr (void) { return log_addr_ + next_off_; }
+
+        // Check if the DataLogNode pointed by myself is valid or not
+        inline bool Valid (void) const {
+            return next_off_ > 256 &&  // should be larger than the DataLogMeta
+                   *(uint8_t*)(log_addr_ + next_off_) == kDataLogNodeValid;
+        }
+
+        inline bool IsCheckPoint (void) const {
+            return next_off_ > 256 &&  // should be larger than the DataLogMeta
+                   reinterpret_cast<DataLogNodeMeta*> (log_addr_ + next_off_)->_.type_ ==
+                       kDataLogNodeCheckpoint;
+        }
+
+        inline void toString () {
+            uint64_t key = *(uint64_t*)(log_addr_ + next_off_ - 16);
+            uint64_t val = *(uint64_t*)(log_addr_ + next_off_ - 8);
+            uint8_t type = *(uint8_t*)(log_addr_ + next_off_);
+            uint8_t len = *(uint8_t*)(log_addr_ + next_off_ + 1);
+            uint64_t next__ = *(uint64_t*)(log_addr_ + next_off_ + 2);
+            printf ("key %lu, val %lu, type %hhu, len %hhu, next %lu \n", key, val, type, len,
+                    next__);
+        }
+
+        // inline DataLogNodeMeta operator* () const { return *this->operator-> (); }
+
+        // inline DataLogNodeMeta* operator-> (void) const {
+        //     DataLogNodeMeta* node_meta = reinterpret_cast<DataLogNodeMeta*> (log_addr_ +
+        //     next_off_); return node_meta;
+        // }
+
+        // Prefix -- overload
+        // inline LinkIterator& operator++ () {
+        //     printf ("next off %lu");
+        //     next_off_ = *(uint64_t*)(log_addr_ + next_off_ + 2);
+        //     return *this;
+        // }
+
+        // Postfix -- overload
+        inline LinkIterator operator++ (int) {
+            auto tmp = *this;
+            printf ("next off %lu\n");
+            uint64_t data = *(uint64_t*)(log_addr_ + next_off_ + 2);
+            uint64_t tid = data >> 48;
+            uint64_t offset = data & 0x000FFFFFFFFFFFF;
+            next_off_ = offset;
+            return tmp;
+        }
+
+    private:
+        // size of the entire LogDataNode of data log node
+        inline size_t NodeSize (void) {
+            DataLogNodeMeta* node_meta = reinterpret_cast<DataLogNodeMeta*> (log_addr_ + next_off_);
+            return 1 + node_meta->_.data_size_ + sizeof (DataLogNodeMeta);
+        }
+        int64_t next_off_;
+        char* log_addr_;
+    };
+
+    SeqIterator Begin (void) { return SeqIterator (256, log_start_addr_); }
+
+    ReverseIterator rBegin (void) {
+        return ReverseIterator (log_cur_tail_.get_rw (), log_start_addr_);
+    }
+
+    LinkIterator lBegin () {
+        return LinkIterator (log_cur_tail_.get_rw () - sizeof (DataLogNodeMeta), log_start_addr_);
+    }
+
+    LinkIterator lBeginRecover (uint64_t offset) { return LinkIterator (offset, log_start_addr_); }
+
+private:
+    size_t log_size_;
+    size_t log_size_mask_;
+    char* log_start_addr_;
+    pmem::obj::p<std::atomic<size_t>> log_cur_tail_;
+};
+
+}  // end of namespace linkedredolog
+
 // https://rigtorp.se/spinlock/
 class AtomicSpinLock {
 public:
@@ -229,6 +616,7 @@ public:
         memset (this, 0, 64);
         highkey_ = -1;
         parentkey_ = -1;
+        next_ = 0;
     }
 
     inline void Lock (void) { lock_.lock (); }
@@ -352,6 +740,24 @@ public:
     }
 
     inline void insert (int64_t key, char* val, int i, int oi, uint8_t tag) {
+        kvs_[i].key = key;
+        kvs_[i].val = val;
+        tags_[i] = tag;
+
+        // atomicly set the meta
+        Meta new_meta = meta_;
+        new_meta.valid_ = meta_.valid_ | (1 << i);
+        if (oi != -1) {
+            // reset old pos if this is an update request.
+            new_meta.valid_ ^= (1 << oi);
+        }
+        new_meta.deleted_ = meta_.deleted_ & (~(1 << i));
+
+        BUFLOG_COMPILER_FENCE ();
+        meta_.data_ = new_meta.data_;
+    }
+
+    inline void insertWithLog (int64_t key, char* val, int i, int oi, uint8_t tag) {
         kvs_[i].key = key;
         kvs_[i].val = val;
         tags_[i] = tag;
@@ -523,7 +929,7 @@ public:
     int64_t highkey_;       // 40 bytes
     int64_t parentkey_;     // 48 bytes
     KV kvs_[13];            // 256 bytes
-    uint64_t next_;
+    uint64_t next_;         //
     uint32_t id_;
 };
 
@@ -655,6 +1061,51 @@ public:
         }
 
         nodes_[bucket_to_insert].insert (key, val, slot_to_insert, old_i, tag);
+        return true;
+    }
+
+    inline bool PutWithLog (int64_t key, char* val) {
+        size_t hash = Hasher::hash_int (key);
+        uint8_t tag = hash & 0xFF;
+        int old_i = -1;
+        int bucket_to_insert = -1;
+        int slot_to_insert = -1;
+        for (int p = 0; p < kProbeLen; ++p) {
+            // int idx = (hash + p) & kNodeNumMask;
+            int idx = (hash + p) % NUM;
+            SortedBufNode& bucket = nodes_[idx];
+            auto empty_bitset = bucket.EmptyBitSet ();
+
+            for (int i : bucket.MatchBitSet (tag)) {
+                KV& kv = bucket.kvs_[i];
+                if (kv.key == key) {
+                    // update
+                    old_i = i;
+                    bucket_to_insert = idx;
+                    slot_to_insert = *empty_bitset;
+                    goto put_probe_end;
+                }
+            }
+
+            if (empty_bitset.validCount () > 1) {
+                bucket_to_insert = idx;
+                slot_to_insert = *empty_bitset;
+            }
+
+            if (!bucket.Full ()) {
+                // reach search end
+                bucket_to_insert = idx;
+                slot_to_insert = *empty_bitset;
+                break;
+            }
+        }
+    put_probe_end:
+        if (bucket_to_insert == -1) {
+            // no avaliable slot
+            return false;
+        }
+
+        nodes_[bucket_to_insert].insertWithLog (key, val, slot_to_insert, old_i, tag);
         return true;
     }
 

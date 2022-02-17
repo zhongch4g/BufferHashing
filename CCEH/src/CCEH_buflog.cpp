@@ -18,7 +18,7 @@
 //#define f_seed 0xc70f6907UL
 //#define s_seed 0xc70f6907UL
 
-// #define INPLACE
+#define INPLACE
 
 // #define WITHOUT_FLUSH
 
@@ -26,19 +26,19 @@
 
 using namespace std;
 
-void Segment::execute_path (PMEMobjpool* pop, vector<pair<size_t, size_t>>& path, Key_t& key,
+void Segment::execute_path (PMEMobjpool *pop, vector<pair<size_t, size_t>> &path, Key_t &key,
                             Value_t value) {
     for (int i = path.size () - 1; i > 0; --i) {
         bucket[path[i].first] = bucket[path[i - 1].first];
-        pmemobj_persist (pop, (char*)&bucket[path[i].first], sizeof (Pair));
+        pmemobj_persist (pop, (char *)&bucket[path[i].first], sizeof (Pair));
     }
     bucket[path[0].first].value = value;
     mfence ();
     bucket[path[0].first].key = key;
-    pmemobj_persist (pop, (char*)&bucket[path[0].first], sizeof (Pair));
+    pmemobj_persist (pop, (char *)&bucket[path[0].first], sizeof (Pair));
 }
 
-void Segment::execute_path (vector<pair<size_t, size_t>>& path, Pair _bucket) {
+void Segment::execute_path (vector<pair<size_t, size_t>> &path, Pair _bucket) {
     int i = 0;
     int j = (i + 1) % 2;
 
@@ -58,10 +58,10 @@ vector<pair<size_t, size_t>> Segment::find_path (size_t target, size_t pattern) 
     path.emplace_back (target, bucket[target].key);
 
     auto cur = target;
-    size_t i = 0;
+    int i = 0;
 
     do {
-        Key_t* key = &bucket[cur].key;
+        Key_t *key = &bucket[cur].key;
         auto f_hash = hash_funcs[0](key, sizeof (Key_t), f_seed);
         auto s_hash = hash_funcs[2](key, sizeof (Key_t), s_seed);
 
@@ -69,7 +69,7 @@ vector<pair<size_t, size_t>> Segment::find_path (size_t target, size_t pattern) 
             break;
         }
 
-        for (size_t j = 0; j < kNumPairPerCacheLine * kNumCacheLine; ++j) {
+        for (int j = 0; j < kNumPairPerCacheLine * kNumCacheLine; ++j) {
             auto f_idx = (((f_hash & kMask) * kNumPairPerCacheLine) + j) % kNumSlot;
             auto s_idx = (((s_hash & kMask) * kNumPairPerCacheLine) + j) % kNumSlot;
 
@@ -90,11 +90,11 @@ vector<pair<size_t, size_t>> Segment::find_path (size_t target, size_t pattern) 
         path.resize (0);
     }
 
-    return (path);
+    return move (path);
 }
 
-bool Segment::Insert4split (Key_t& key, Value_t value, size_t loc) {
-    for (size_t i = 0; i < kNumPairPerCacheLine * kNumCacheLine; ++i) {
+bool Segment::Insert4split (Key_t &key, Value_t value, size_t loc) {
+    for (int i = 0; i < kNumPairPerCacheLine * kNumCacheLine; ++i) {
         auto slot = (loc + i) % kNumSlot;
         if (bucket[slot].key == INVALID) {
             bucket[slot].key = key;
@@ -105,14 +105,14 @@ bool Segment::Insert4split (Key_t& key, Value_t value, size_t loc) {
     return 0;
 }
 
-Segment* Segment::SplitDram (WriteBuffer::Iterator& iter) {
-    Segment* split = new Segment ();
+Segment *Segment::SplitDram (WriteBuffer::Iterator &iter) {
+    Segment *split = new Segment ();
     // splits[0].initSegment(local_depth+1); //   old segment
     split->initSegment (local_depth + 1);  // split segment
 
     auto pattern = ((size_t)1 << (sizeof (Key_t) * 8 - local_depth - 1));
 
-    for (size_t i = 0; i < kNumSlot; ++i) {
+    for (int i = 0; i < kNumSlot; ++i) {
         auto f_hash = h (&bucket[i].key, sizeof (Key_t));
         if (f_hash & pattern) {
             if (!split->Insert4split (bucket[i].key, bucket[i].value,
@@ -129,7 +129,7 @@ Segment* Segment::SplitDram (WriteBuffer::Iterator& iter) {
     }
 
     while (iter.Valid ()) {
-        auto& kv = *iter;
+        auto &kv = *iter;
         Key_t key = kv.key;
         Value_t val = kv.val;
         auto f_hash = h (&key, sizeof (Key_t));
@@ -156,16 +156,16 @@ Segment* Segment::SplitDram (WriteBuffer::Iterator& iter) {
     return split;
 }
 
-TOID (struct Segment) * Segment::Split (PMEMobjpool* pop) {
+TOID (struct Segment) * Segment::Split (PMEMobjpool *pop) {
 #ifdef INPLACE
-    TOID (struct Segment)* split = new TOID (struct Segment)[2];
+    TOID (struct Segment) *split = new TOID (struct Segment)[2];
     split[0] = pmemobj_oid (this);
     POBJ_ALLOC (pop, &split[1], struct Segment, sizeof (struct Segment), NULL, NULL);
     D_RW (split[1])->initSegment (local_depth + 1);
 
     auto pattern = ((size_t)1 << (sizeof (Key_t) * 8 - local_depth - 1));
 
-    for (size_t i = 0; i < kNumSlot; ++i) {
+    for (int i = 0; i < kNumSlot; ++i) {
         auto f_hash = hash_funcs[0](&bucket[i].key, sizeof (Key_t), f_seed);
         if (f_hash & pattern) {
             if (!D_RW (split[1])->Insert4split (bucket[i].key, bucket[i].value,
@@ -178,17 +178,17 @@ TOID (struct Segment) * Segment::Split (PMEMobjpool* pop) {
         }
     }
 
-    pmemobj_persist (pop, (char*)D_RO (split[1]), sizeof (struct Segment));
+    pmemobj_persist (pop, (char *)D_RO (split[1]), sizeof (struct Segment));
     return split;
 #else
-    TOID (struct Segment)* split = new TOID (struct Segment)[2];
+    TOID (struct Segment) *split = new TOID (struct Segment)[2];
     POBJ_ALLOC (pop, &split[0], struct Segment, sizeof (struct Segment), NULL, NULL);
     POBJ_ALLOC (pop, &split[1], struct Segment, sizeof (struct Segment), NULL, NULL);
     D_RW (split[0])->initSegment (local_depth + 1);
     D_RW (split[1])->initSegment (local_depth + 1);
 
     auto pattern = ((size_t)1 << (sizeof (Key_t) * 8 - local_depth - 1));
-    for (size_t i = 0; i < kNumSlot; ++i) {
+    for (int i = 0; i < kNumSlot; ++i) {
         auto f_hash = h (&bucket[i].key, sizeof (Key_t));
         if (f_hash & pattern) {
             D_RW (split[1])->Insert4split (bucket[i].key, bucket[i].value,
@@ -199,43 +199,42 @@ TOID (struct Segment) * Segment::Split (PMEMobjpool* pop) {
         }
     }
 
-    pmemobj_persist (pop, (char*)D_RO (split[0]), sizeof (struct Segment));
-    pmemobj_persist (pop, (char*)D_RO (split[1]), sizeof (struct Segment));
+    pmemobj_persist (pop, (char *)D_RO (split[0]), sizeof (struct Segment));
+    pmemobj_persist (pop, (char *)D_RO (split[1]), sizeof (struct Segment));
 
     return split;
 #endif
 }
 
-void CCEH::initCCEH (PMEMobjpool* pop) {
+void CCEH::initCCEH (PMEMobjpool *pop) {
     crashed = true;
     POBJ_ALLOC (pop, &dir, struct Directory, sizeof (struct Directory), NULL, NULL);
     D_RW (dir)->initDirectory ();
     POBJ_ALLOC (pop, &D_RW (dir)->segment, TOID (struct Segment),
                 sizeof (TOID (struct Segment)) * D_RO (dir)->capacity, NULL, NULL);
 
-    for (size_t i = 0; i < D_RO (dir)->capacity; ++i) {
+    for (int i = 0; i < D_RO (dir)->capacity; ++i) {
         POBJ_ALLOC (pop, &D_RO (D_RO (dir)->segment)[i], struct Segment, sizeof (struct Segment),
                     NULL, NULL);
         D_RW (D_RW (D_RW (dir)->segment)[i])->initSegment ();
     }
 }
 
-void CCEH::initCCEH (PMEMobjpool* pop, size_t initCap) {
+void CCEH::initCCEH (PMEMobjpool *pop, size_t initCap) {
     crashed = true;
     POBJ_ALLOC (pop, &dir, struct Directory, sizeof (struct Directory), NULL, NULL);
-    printf ("Initialize the directory \n");
     D_RW (dir)->initDirectory (static_cast<size_t> (log2 (initCap)));
     POBJ_ALLOC (pop, &D_RW (dir)->segment, TOID (struct Segment),
                 sizeof (TOID (struct Segment)) * D_RO (dir)->capacity, NULL, NULL);
 
-    for (size_t i = 0; i < D_RO (dir)->capacity; ++i) {
+    for (int i = 0; i < D_RO (dir)->capacity; ++i) {
         POBJ_ALLOC (pop, &D_RO (D_RO (dir)->segment)[i], struct Segment, sizeof (struct Segment),
                     NULL, NULL);
         D_RW (D_RW (D_RW (dir)->segment)[i])->initSegment (static_cast<size_t> (log2 (initCap)));
     }
 }
 
-void CCEH::Insert (PMEMobjpool* pop, Key_t& key, Value_t value) {
+void CCEH::Insert (PMEMobjpool *pop, Key_t &key, Value_t value) {
     auto f_hash = hash_funcs[0](&key, sizeof (Key_t), f_seed);
 
 retry:
@@ -251,7 +250,7 @@ retry:
         goto retry;
     }
 
-    bool res = target_ptr->bufnode_->Put (key, (char*)value);
+    bool res = target_ptr->bufnode_->Put (key, (char *)value);
     if (res) {
         // successfully insert to bufnode
         target_ptr->bufnode_->Unlock ();
@@ -260,14 +259,14 @@ retry:
 #ifndef CONFIG_OUT_OF_PLACE_MERGE
         auto iter = D_RW (target)->bufnode_->Begin ();
         while (iter.Valid ()) {
-            auto& kv = *iter;
+            auto &kv = *iter;
             Key_t key = kv.key;
             Value_t val = kv.val;
             insert (pop, key, val, false);
             ++iter;
         }
 #ifdef WITHOUT_FLUSH
-        pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[x],
+        pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[x],
                          sizeof (TOID (struct Segment)));
 #endif
         D_RW (target)->bufnode_->Reset ();
@@ -281,7 +280,7 @@ retry:
     }
 }
 
-void CCEH::insert (PMEMobjpool* pop, Key_t& key, Value_t value, bool with_lock) {
+void CCEH::insert (PMEMobjpool *pop, Key_t &key, Value_t value, bool with_lock) {
     auto f_hash = hash_funcs[0](&key, sizeof (Key_t), f_seed);
     auto f_idx = (f_hash & kMask) * kNumPairPerCacheLine;
 
@@ -325,7 +324,7 @@ RETRY:
 #endif
                 D_RW (target)->bucket[loc].key = key;
 #ifndef WITHOUT_FLUSH
-                pmemobj_persist (pop, (char*)&D_RO (target)->bucket[loc], sizeof (Pair));
+                pmemobj_persist (pop, (char *)&D_RO (target)->bucket[loc], sizeof (Pair));
 #endif
                 /* release segment exclusive lock */
                 if (with_lock) D_RW (target)->unlock ();
@@ -351,7 +350,7 @@ RETRY:
 #endif
                 D_RW (target)->bucket[loc].key = key;
 #ifndef WITHOUT_FLUSH
-                pmemobj_persist (pop, (char*)&D_RO (target)->bucket[loc], sizeof (Pair));
+                pmemobj_persist (pop, (char *)&D_RO (target)->bucket[loc], sizeof (Pair));
 #endif
                 if (with_lock) D_RW (target)->unlock ();
                 return;
@@ -361,7 +360,8 @@ RETRY:
 
     auto target_local_depth = D_RO (target)->local_depth;
     // COLLISION !!
-    /* need to split segment but release the exclusive lock first to avoid deadlock */
+    /* need to split segment but release the exclusive lock first to avoid
+     * deadlock */
     if (with_lock) D_RW (target)->unlock ();
 
     if (with_lock && !D_RW (target)->suspend ()) {
@@ -384,7 +384,7 @@ RETRY:
     }
 #endif
 
-    TOID (struct Segment)* s = D_RW (target)->Split (pop);
+    TOID (struct Segment) *s = D_RW (target)->Split (pop);
 DIR_RETRY:
     /* need to double the directory */
     if (D_RO (target)->local_depth == D_RO (dir)->depth) {
@@ -395,7 +395,7 @@ DIR_RETRY:
         printf ("Double dir\n");
 
         x = (f_hash >> (8 * sizeof (f_hash) - D_RO (dir)->depth));
-        // auto dir_old = dir;
+        auto dir_old = dir;
         TOID_ARRAY (TOID (struct Segment)) d = D_RO (dir)->segment;
         TOID (struct Directory) _dir;
         POBJ_ALLOC (pop, &_dir, struct Directory, sizeof (struct Directory), NULL, NULL);
@@ -403,7 +403,7 @@ DIR_RETRY:
                     sizeof (TOID (struct Segment)) * D_RO (dir)->capacity * 2, NULL, NULL);
         D_RW (_dir)->initDirectory (D_RO (dir)->depth + 1);
 
-        for (size_t i = 0; i < D_RO (dir)->capacity; ++i) {
+        for (int i = 0; i < D_RO (dir)->capacity; ++i) {
             if (i == x) {
                 D_RW (D_RW (_dir)->segment)[2 * i] = s[0];
                 D_RW (D_RW (_dir)->segment)[2 * i + 1] = s[1];
@@ -413,14 +413,14 @@ DIR_RETRY:
             }
         }
 
-        pmemobj_persist (pop, (char*)&D_RO (D_RO (_dir)->segment)[0],
+        pmemobj_persist (pop, (char *)&D_RO (D_RO (_dir)->segment)[0],
                          sizeof (TOID (struct Segment)) * D_RO (_dir)->capacity);
-        pmemobj_persist (pop, (char*)&_dir, sizeof (struct Directory));
+        pmemobj_persist (pop, (char *)&_dir, sizeof (struct Directory));
         dir = _dir;
-        pmemobj_persist (pop, (char*)&dir, sizeof (TOID (struct Directory)));
+        pmemobj_persist (pop, (char *)&dir, sizeof (TOID (struct Directory)));
 #ifdef INPLACE
         D_RW (s[0])->local_depth++;
-        pmemobj_persist (pop, (char*)&D_RO (s[0])->local_depth, sizeof (size_t));
+        pmemobj_persist (pop, (char *)&D_RO (s[0])->local_depth, sizeof (size_t));
         /* release segment exclusive lock */
         D_RW (s[0])->sema = 0;
 #endif
@@ -436,23 +436,23 @@ DIR_RETRY:
             if (x % 2 == 0) {
                 D_RW (D_RW (dir)->segment)[x + 1] = s[1];
 #ifdef INPLACE
-                pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[x + 1],
+                pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[x + 1],
                                  sizeof (TOID (struct Segment)));
 #else
                 mfence ();
                 D_RW (D_RW (dir)->segment)[x] = s[0];
-                pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[x],
+                pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[x],
                                  sizeof (TOID (struct Segment)) * 2);
 #endif
             } else {
                 D_RW (D_RW (dir)->segment)[x] = s[1];
 #ifdef INPLACE
-                pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[x],
+                pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[x],
                                  sizeof (TOID (struct Segment)));
 #else
                 mfence ();
                 D_RW (D_RW (dir)->segment)[x - 1] = s[0];
-                pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[x - 1],
+                pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[x - 1],
                                  sizeof (TOID (struct Segment)) * 2);
 #endif
             }
@@ -460,7 +460,7 @@ DIR_RETRY:
 
 #ifdef INPLACE
             D_RW (s[0])->local_depth++;
-            pmemobj_persist (pop, (char*)&D_RO (s[0])->local_depth, sizeof (size_t));
+            pmemobj_persist (pop, (char *)&D_RO (s[0])->local_depth, sizeof (size_t));
             /* release target segment exclusive lock */
             D_RW (s[0])->sema = 0;
 #endif
@@ -471,19 +471,19 @@ DIR_RETRY:
                 D_RW (D_RW (dir)->segment)[loc + stride / 2 + i] = s[1];
             }
 #ifdef INPLACE
-            pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[loc + stride / 2],
+            pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[loc + stride / 2],
                              sizeof (TOID (struct Segment)) * stride / 2);
 #else
             for (int i = 0; i < stride / 2; ++i) {
                 D_RW (D_RW (dir)->segment)[loc + i] = s[0];
             }
-            pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[loc],
+            pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[loc],
                              sizeof (TOID (struct Segment)) * stride);
 #endif
             D_RW (dir)->unlock ();
 #ifdef INPLACE
             D_RW (s[0])->local_depth++;
-            pmemobj_persist (pop, (char*)&D_RO (s[0])->local_depth, sizeof (size_t));
+            pmemobj_persist (pop, (char *)&D_RO (s[0])->local_depth, sizeof (size_t));
             /* release target segment exclusive lock */
             D_RW (s[0])->sema = 0;
 #endif
@@ -493,7 +493,7 @@ DIR_RETRY:
     goto RETRY;
 }
 
-void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool* pop, WriteBuffer* bufnode, Segment_toid& target,
+void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool *pop, WriteBuffer *bufnode, Segment_toid &target,
                                        size_t f_hash) {
     // bufnode has already been locked
     // out of place merge
@@ -507,7 +507,7 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool* pop, WriteBuffer* bufnode, S
     int inserted = 0;
     while (iter.Valid ()) {
         inserted++;
-        auto& kv = *iter;
+        auto &kv = *iter;
         Key_t key = kv.key;
         Value_t val = kv.val;
         auto f_hash = h (&key, sizeof (Key_t));
@@ -525,9 +525,9 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool* pop, WriteBuffer* bufnode, S
         // INFO("Split segment %lu. depth %lu, ", x, target_local_depth);
 
         // step 1. Split the dram segment
-        Segment* split = old_segment_dram.SplitDram (iter);
-        Segment* split_segment_dram = split;
-        Segment* new_segment_dram = &old_segment_dram;
+        Segment *split = old_segment_dram.SplitDram (iter);
+        Segment *split_segment_dram = split;
+        Segment *new_segment_dram = &old_segment_dram;
         new_segment_dram->local_depth = split_segment_dram->local_depth;
         new_segment_dram->bufnode_->local_depth = new_segment_dram->local_depth;
 
@@ -565,15 +565,15 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool* pop, WriteBuffer* bufnode, S
             D_RW (_dir)->initDirectory (D_RO (dir)->depth + 1);
 
             auto x = (f_hash >> (8 * sizeof (f_hash) - D_RO (dir)->depth));
-            for (size_t i = 0; i < D_RO (dir)->capacity; ++i) {
+            for (int i = 0; i < D_RO (dir)->capacity; ++i) {
                 if (i == x) {
                     D_RW (D_RW (_dir)->segment)[2 * i] = new_segment;
                     D_RW (D_RW (_dir)->segment)[2 * i + 1] = split_segment;
 
                     DEBUG (
-                        "Double directory segment %lu: 0x%lx. new segment 0x%lx to dir %lu, depth: "
-                        "%lu, bufnode 0x%lx depth: %lu, split segment 0x%lx to dir %lu, depth: "
-                        "%lu, bufnode 0x%lx depth: %lu",
+                        "Double directory segment %lu: 0x%lx. new segment 0x%lx to dir "
+                        "%lu, depth: %lu, bufnode 0x%lx depth: %lu, split segment "
+                        "0x%lx to dir %lu, depth: %lu, bufnode 0x%lx depth: %lu",
                         x, D_RW (target), D_RW (new_segment), 2 * i,
                         D_RW (new_segment)->local_depth, D_RW (new_segment)->bufnode_,
                         D_RW (new_segment)->bufnode_->local_depth, D_RW (split_segment), 2 * i + 1,
@@ -583,18 +583,18 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool* pop, WriteBuffer* bufnode, S
                     D_RW (D_RW (_dir)->segment)[2 * i] = D_RO (d)[i];
                     D_RW (D_RW (_dir)->segment)[2 * i + 1] = D_RO (d)[i];
                     DEBUG (
-                        "Double directory segment %lu: 0x%lx. move segment 0x%lx to dir %lu and "
-                        "dir %lu",
+                        "Double directory segment %lu: 0x%lx. move segment 0x%lx to "
+                        "dir %lu and dir %lu",
                         x, D_RW (target), D_RW (D_RW (d)[i]), 2 * i, 2 * i + 1);
                 }
             }
 
-            pmemobj_flush (pop, (char*)&D_RO (D_RO (_dir)->segment)[0],
+            pmemobj_flush (pop, (char *)&D_RO (D_RO (_dir)->segment)[0],
                            sizeof (TOID (struct Segment)) * D_RO (_dir)->capacity);
-            pmemobj_flush (pop, (char*)&_dir, sizeof (struct Directory));
+            pmemobj_flush (pop, (char *)&_dir, sizeof (struct Directory));
             pmemobj_drain (pop);
             dir = _dir;
-            pmemobj_persist (pop, (char*)&dir, sizeof (TOID (struct Directory)));
+            pmemobj_persist (pop, (char *)&dir, sizeof (TOID (struct Directory)));
         } else {  // normal split
             while (!D_RW (dir)->lock ()) {
                 asm("nop");
@@ -605,18 +605,19 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool* pop, WriteBuffer* bufnode, S
             if (D_RO (dir)->depth == D_RO (target)->local_depth + 1) {
                 if (x % 2 == 0) {
                     D_RW (D_RW (dir)->segment)[x + 1] = split_segment;
-                    pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[x + 1],
+                    pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[x + 1],
                                      sizeof (TOID (struct Segment)));
 
                     mfence ();
                     D_RW (D_RW (dir)->segment)[x] = new_segment;
-                    pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[x],
+                    pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[x],
                                      sizeof (TOID (struct Segment)) * 2);
 
                     DEBUG (
-                        "Gd: %lu. Normal split segment %lu: 0x%lx. depth: %lu. new segment 0x%lx "
-                        "to dir %lu, depth: %lu, bufnode 0x%lx depth: %lu, split segment 0x%lx to "
-                        "dir %lu depth: %lu, bufnode 0x%lx depth: %lu",
+                        "Gd: %lu. Normal split segment %lu: 0x%lx. depth: %lu. new "
+                        "segment 0x%lx to dir %lu, depth: %lu, bufnode 0x%lx depth: "
+                        "%lu, split segment 0x%lx to dir %lu depth: %lu, bufnode 0x%lx "
+                        "depth: %lu",
                         D_RO (dir)->depth, x, D_RW (target), D_RW (target)->local_depth,
                         D_RW (new_segment), x, D_RW (new_segment)->local_depth,
                         D_RW (new_segment)->bufnode_, D_RW (new_segment)->bufnode_->local_depth,
@@ -625,19 +626,20 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool* pop, WriteBuffer* bufnode, S
                         D_RW (split_segment)->bufnode_->local_depth);
                 } else {
                     D_RW (D_RW (dir)->segment)[x] = split_segment;
-                    pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[x],
+                    pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[x],
                                      sizeof (TOID (struct Segment)));
 
                     mfence ();
 
                     D_RW (D_RW (dir)->segment)[x - 1] = new_segment;
-                    pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[x - 1],
+                    pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[x - 1],
                                      sizeof (TOID (struct Segment)) * 2);
 
                     DEBUG (
-                        "Gd: %lu. Normal split segment %lu: 0x%lx. depth: %lu. new segment 0x%lx "
-                        "to dir %lu, depth: %lu, bufnode 0x%lx depth: %lu, split segment 0x%lx to "
-                        "dir %lu depth: %lu, bufnode 0x%lx depth: %lu",
+                        "Gd: %lu. Normal split segment %lu: 0x%lx. depth: %lu. new "
+                        "segment 0x%lx to dir %lu, depth: %lu, bufnode 0x%lx depth: "
+                        "%lu, split segment 0x%lx to dir %lu depth: %lu, bufnode 0x%lx "
+                        "depth: %lu",
                         D_RO (dir)->depth, x, D_RW (target), D_RW (target)->local_depth,
                         D_RW (new_segment), x - 1, D_RW (new_segment)->local_depth,
                         D_RW (new_segment)->bufnode_, D_RW (new_segment)->bufnode_->local_depth,
@@ -653,32 +655,32 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool* pop, WriteBuffer* bufnode, S
                 for (int i = 0; i < stride / 2; ++i) {
                     D_RW (D_RW (dir)->segment)[loc + stride / 2 + i] = split_segment;
                     DEBUG (
-                        "Gd: %lu. Stride split segment %lu: 0x%lx. depth: %lu. Split segment 0x%lx "
-                        "to dir %lu depth: %lu, bufnode 0x%lx depth: %lu",
+                        "Gd: %lu. Stride split segment %lu: 0x%lx. depth: %lu. Split "
+                        "segment 0x%lx to dir %lu depth: %lu, bufnode 0x%lx depth: %lu",
                         D_RO (dir)->depth, x, D_RW (target), D_RW (target)->local_depth,
                         D_RW (split_segment), loc + stride / 2 + i,
                         D_RW (split_segment)->local_depth, D_RW (split_segment)->bufnode_,
                         D_RW (split_segment)->bufnode_->local_depth);
                 }
-                pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[loc + stride / 2],
+                pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[loc + stride / 2],
                                  sizeof (TOID (struct Segment)) * stride / 2);
 
                 for (int i = 0; i < stride / 2; ++i) {
                     D_RW (D_RW (dir)->segment)[loc + i] = new_segment;
                     DEBUG (
-                        "Gd: %lu. Normal split segment %lu: 0x%lx. depth: %lu. new segment 0x%lx "
-                        "to dir %lu, depth: %lu, bufnode 0x%lx depth: %lu",
+                        "Gd: %lu. Normal split segment %lu: 0x%lx. depth: %lu. new "
+                        "segment 0x%lx to dir %lu, depth: %lu, bufnode 0x%lx depth: %lu",
                         D_RO (dir)->depth, x, D_RW (target), D_RW (target)->local_depth,
                         D_RW (new_segment), loc + i, D_RW (new_segment)->local_depth,
                         D_RW (new_segment)->bufnode_, D_RW (new_segment)->bufnode_->local_depth);
                 }
-                pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[loc],
+                pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[loc],
                                  sizeof (TOID (struct Segment)) * stride);
             }
             DEBUG (
-                "Gd: %lu. Normal split end. segment %lu: 0x%lx. depth: %lu. new segment 0x%lx, "
-                "depth: %lu, bufnode 0x%lx depth: %lu, split segment 0x%lx, depth: %lu, bufnode "
-                "0x%lx depth: %lu",
+                "Gd: %lu. Normal split end. segment %lu: 0x%lx. depth: %lu. new "
+                "segment 0x%lx, depth: %lu, bufnode 0x%lx depth: %lu, split "
+                "segment 0x%lx, depth: %lu, bufnode 0x%lx depth: %lu",
                 D_RO (dir)->depth, x, D_RW (target), D_RW (target)->local_depth, D_RW (new_segment),
                 D_RW (new_segment)->local_depth, D_RW (new_segment)->bufnode_,
                 D_RW (new_segment)->bufnode_->local_depth, D_RW (split_segment),
@@ -702,8 +704,8 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool* pop, WriteBuffer* bufnode, S
         auto x = (f_hash >> (8 * sizeof (f_hash) - D_RO (dir)->depth));
 
         DEBUG (
-            "Merge segment. old segment %lu: 0x%lx. local d: %lu, bufnode 0x%lx, d: %lu new "
-            "segment 0x%lx. local d: %lu, bufnode 0x%lx, d: %lu",
+            "Merge segment. old segment %lu: 0x%lx. local d: %lu, bufnode 0x%lx, "
+            "d: %lu new segment 0x%lx. local d: %lu, bufnode 0x%lx, d: %lu",
             x, D_RW (target), D_RW (target)->local_depth, D_RW (target)->bufnode_,
             D_RW (target)->bufnode_->local_depth, D_RW (new_segment),
             D_RW (new_segment)->local_depth, D_RW (new_segment)->bufnode_,
@@ -713,28 +715,30 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool* pop, WriteBuffer* bufnode, S
             // only need to update one dir entry
             // INFO("Update one directory %lu", x);
             D_RW (D_RW (dir)->segment)[x] = new_segment;
-            pmemobj_persist (pop, (char*)&D_RW (D_RW (dir)->segment)[x],
+            pmemobj_persist (pop, (char *)&D_RW (D_RW (dir)->segment)[x],
                              sizeof (TOID (struct Segment)));
         } else if (D_RO (dir)->depth == D_RO (target)->local_depth + 1) {
             if (x % 2 == 0) {
-                // INFO("Merge. Update two directory %lu, %lu. Segment %lu depth: %u, dir depth:
-                // %lu", x, x+1, x, D_RO(target)->local_depth, D_RO(dir)->depth);
+                // INFO("Merge. Update two directory %lu, %lu. Segment %lu depth: %u,
+                // dir depth: %lu", x, x+1, x, D_RO(target)->local_depth,
+                // D_RO(dir)->depth);
                 D_RW (D_RW (dir)->segment)[x + 1] = new_segment;
-                pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[x + 1],
+                pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[x + 1],
                                  sizeof (TOID (struct Segment)));
                 mfence ();
                 D_RW (D_RW (dir)->segment)[x] = new_segment;
-                pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[x],
+                pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[x],
                                  sizeof (TOID (struct Segment)) * 2);
             } else {
-                // INFO("Merge. Update two directory %lu, %lu. Segment %lu depth: %u, dir depth:
-                // %lu", x, x-1, x, D_RO(target)->local_depth, D_RO(dir)->depth);
+                // INFO("Merge. Update two directory %lu, %lu. Segment %lu depth: %u,
+                // dir depth: %lu", x, x-1, x, D_RO(target)->local_depth,
+                // D_RO(dir)->depth);
                 D_RW (D_RW (dir)->segment)[x] = new_segment;
-                pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[x],
+                pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[x],
                                  sizeof (TOID (struct Segment)));
                 mfence ();
                 D_RW (D_RW (dir)->segment)[x - 1] = new_segment;
-                pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[x - 1],
+                pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[x - 1],
                                  sizeof (TOID (struct Segment)) * 2);
             }
         } else {
@@ -747,7 +751,7 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool* pop, WriteBuffer* bufnode, S
                 // INFO("Update multiple directory %lu", new_x);
                 D_RW (D_RW (dir)->segment)[new_x] = new_segment;
             }
-            pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[loc + stride / 2],
+            pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[loc + stride / 2],
                              sizeof (TOID (struct Segment)) * stride / 2);
         }
 
@@ -757,10 +761,11 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool* pop, WriteBuffer* bufnode, S
     bufnode->Reset ();
 }
 
-bool CCEH::Delete (Key_t& key) { return false; }
+bool CCEH::Delete (Key_t &key) { return false; }
 
-Value_t CCEH::Get (Key_t& key) {
+Value_t CCEH::Get (Key_t &key) {
     auto f_hash = hash_funcs[0](&key, sizeof (Key_t), f_seed);
+    auto f_idx = (f_hash & kMask) * kNumPairPerCacheLine;
 RETRY:
     while (D_RO (dir)->sema < 0) {
         asm("nop");
@@ -772,7 +777,7 @@ RETRY:
         goto RETRY;
     }
 
-    char* val;
+    char *val;
     auto res = D_RW (target)->bufnode_->Get (key, val);
     if (res) {
         return Value_t (val);
@@ -781,7 +786,7 @@ RETRY:
     }
 }
 
-Value_t CCEH::get (Key_t& key) {
+Value_t CCEH::get (Key_t &key) {
     auto f_hash = hash_funcs[0](&key, sizeof (Key_t), f_seed);
     auto f_idx = (f_hash & kMask) * kNumPairPerCacheLine;
 
@@ -813,7 +818,7 @@ RETRY:
         goto RETRY;
     }
 
-    for (size_t i = 0; i < kNumPairPerCacheLine * kNumCacheLine; ++i) {
+    for (int i = 0; i < kNumPairPerCacheLine * kNumCacheLine; ++i) {
         auto loc = (f_idx + i) % Segment::kNumSlot;
         if (D_RO (target)->bucket[loc].key == key) {
             Value_t v = D_RO (target)->bucket[loc].value;
@@ -827,7 +832,7 @@ RETRY:
 
     auto s_hash = hash_funcs[2](&key, sizeof (Key_t), s_seed);
     auto s_idx = (s_hash & kMask) * kNumPairPerCacheLine;
-    for (size_t i = 0; i < kNumPairPerCacheLine * kNumCacheLine; ++i) {
+    for (int i = 0; i < kNumPairPerCacheLine * kNumCacheLine; ++i) {
         auto loc = (s_idx + i) % Segment::kNumSlot;
         if (D_RO (target)->bucket[loc].key == key) {
             Value_t v = D_RO (target)->bucket[loc].value;
@@ -845,30 +850,30 @@ RETRY:
     return NONE;
 }
 
-void CCEH::Recovery (PMEMobjpool* pop) {
+void CCEH::Recovery (PMEMobjpool *pop) {
     size_t i = 0;
     while (i < D_RO (dir)->capacity) {
         size_t depth_cur = D_RO (D_RO (D_RO (dir)->segment)[i])->local_depth;
         size_t stride = pow (2, D_RO (dir)->depth - depth_cur);
         size_t buddy = i + stride;
         if (buddy == D_RO (dir)->capacity) break;
-        for (size_t j = buddy - 1; i < j; j--) {
+        for (int j = buddy - 1; i < j; j--) {
             if (D_RO (D_RO (D_RO (dir)->segment)[j])->local_depth != depth_cur) {
                 D_RW (D_RW (dir)->segment)[j] = D_RO (D_RO (dir)->segment)[i];
-                pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[i],
+                pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[i],
                                  sizeof (TOID (struct Segment)));
             }
         }
         i += stride;
     }
-    pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[0],
+    pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[0],
                      sizeof (TOID (struct Segment)) * D_RO (dir)->capacity);
 }
 
 double CCEH::Utilization (void) {
     size_t sum = 0;
     size_t cnt = 0;
-    for (size_t i = 0; i < D_RO (dir)->capacity; ++cnt) {
+    for (int i = 0; i < D_RO (dir)->capacity; ++cnt) {
         auto target = D_RO (D_RO (dir)->segment)[i];
         int stride = pow (2, D_RO (dir)->depth - D_RO (target)->local_depth);
         auto pattern = (i >> (D_RO (dir)->depth - D_RO (target)->local_depth));
@@ -886,7 +891,7 @@ double CCEH::Utilization (void) {
 
 size_t CCEH::Capacity (void) {
     size_t cnt = 0;
-    for (size_t i = 0; i < D_RO (dir)->capacity; cnt++) {
+    for (int i = 0; i < D_RO (dir)->capacity; cnt++) {
         auto target = D_RO (D_RO (dir)->segment)[i];
         int stride = pow (2, D_RO (dir)->depth - D_RO (target)->local_depth);
         i += stride;
@@ -896,7 +901,7 @@ size_t CCEH::Capacity (void) {
 }
 
 // for debugging
-Value_t CCEH::FindAnyway (Key_t& key) {
+Value_t CCEH::FindAnyway (Key_t &key) {
     for (size_t i = 0; i < D_RO (dir)->capacity; ++i) {
         for (size_t j = 0; j < Segment::kNumSlot; ++j) {
             if (D_RO (D_RO (D_RO (dir)->segment)[i])->bucket[j].key == key) {
