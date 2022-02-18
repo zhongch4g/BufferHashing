@@ -245,7 +245,8 @@ public:
         //         elapsed * 1e6 / done_, throughput / 1024 / 1024, (extra.empty () ? "" : " "),
         //         extra.c_str ());
 
-        printf ("%-12s %llu operations, %2.2f real_elapsed , %2.2f Mops/s\n", name.ToString ().c_str (), done_, elapsed, throughput / 1024 / 1024);
+        printf ("%-12s %llu operations, %2.2f real_elapsed , %2.2f Mops/s\n",
+                name.ToString ().c_str (), done_, elapsed, throughput / 1024 / 1024);
 
         if (print_hist) {
             fprintf (stdout, "Nanoseconds per op:\n%s\n", hist_.ToString ().c_str ());
@@ -397,8 +398,7 @@ public:
           writes_ (FLAGS_write),
           key_trace_ (nullptr),
           hashtable_ (OID_NULL),
-          trace_counter_ (0),
-          trace_counter1_ (FLAGS_num / 10000 / 2) {
+          trace_counter_ (0) {
         remove (FLAGS_filepath.c_str ());  // delete the mapped file.
         pop_ = pmemobj_create (FLAGS_filepath.c_str (), "CCEH", POOL_SIZE, 0666);
         if (!pop_) {
@@ -862,7 +862,7 @@ public:
                 start_offset + interval);
         Duration duration (FLAGS_readtime, reads_);
         thread->stats.Start ();
-        while (!duration.Done(batch) && key_iterator.Valid ()) {
+        while (!duration.Done (batch) && key_iterator.Valid ()) {
             uint64_t j = 0;
             for (; j < batch && key_iterator.Valid (); j++) {
                 size_t ikey = key_iterator.Next ();
@@ -908,9 +908,9 @@ public:
             perror ("DoWrite lack key_trace_ initialization.");
         }
         int nthread = FLAGS_thread / FLAGS_ins_num;  // 4 how many threads each CCEH
-        uint32_t interval = num_ / nthread;            // cut the trace to num_/1M parts
+        uint32_t interval = num_ / nthread;          // cut the trace to num_/1M parts
         size_t start_offset = (thread->tid % nthread) * interval;
-        printf("type %f \n", thread->tid * 1.0 / nthread);
+        printf ("type %f \n", thread->tid * 1.0 / nthread);
         RandomKeyTrace::RangeIterator key_iterator;
         if (thread->tid / nthread == 0) {  // 0
             key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
@@ -927,7 +927,7 @@ public:
 
         thread->stats.Start ();
         Duration duration (FLAGS_readtime, reads_);
-        while (!duration.Done(batch) && key_iterator.Valid ()) {
+        while (!duration.Done (batch) && key_iterator.Valid ()) {
             uint64_t j = 0;
             for (; j < batch && key_iterator.Valid (); j++) {
                 size_t ikey = key_iterator.Next ();
@@ -976,7 +976,7 @@ public:
                 start_offset + interval);
         Duration duration (FLAGS_readtime, reads_);
         thread->stats.Start ();
-        while (!duration.Done(batch) && key_iterator.Valid ()) {
+        while (!duration.Done (batch) && key_iterator.Valid ()) {
             uint64_t j = 0;
             for (; j < batch && key_iterator.Valid (); j++) {
                 size_t ikey = key_iterator.Next ();
@@ -984,8 +984,7 @@ public:
                     D_RW (hashtable0_)->Get (ikey);
                 } else if (thread->tid >= nthread) {
                     if (thread->ycsb_gen.NextG (FLAGS_gChoice) == kYCSB_Write) {
-                        D_RW (hashtable1_)
-                                  ->Insert (pop1_, ikey, reinterpret_cast<Value_t> (ikey));
+                        D_RW (hashtable1_)->Insert (pop1_, ikey, reinterpret_cast<Value_t> (ikey));
                     } else {
                         D_RW (hashtable1_)->Get (ikey);
                     }
@@ -1136,10 +1135,11 @@ public:
                 }
             }
             thread->stats.FinishedBatchOp (j);
-            printf("[bufferrate]%u,%u,%2.2f\n", 
-            D_RW (hashtable_)->curBufferNum.load (std::memory_order_relaxed), 
-            D_RW (hashtable_)->curSegnumNum.load (std::memory_order_relaxed),
-            D_RW (hashtable_)->curBufferNum.load (std::memory_order_relaxed)*1.0/D_RW (hashtable_)->curSegnumNum.load (std::memory_order_relaxed));
+            printf ("[bufferrate]%u,%u,%2.2f\n",
+                    D_RW (hashtable_)->curBufferNum.load (std::memory_order_relaxed),
+                    D_RW (hashtable_)->curSegnumNum.load (std::memory_order_relaxed),
+                    D_RW (hashtable_)->curBufferNum.load (std::memory_order_relaxed) * 1.0 /
+                        D_RW (hashtable_)->curSegnumNum.load (std::memory_order_relaxed));
         }
         char buf[100];
         snprintf (buf, sizeof (buf), "(insert: %lu, read: %lu)", insert, find);
@@ -1193,7 +1193,7 @@ public:
         auto key_iterator =
             key_trace_->iterate_between (start_offset + 0.8 * interval, start_offset + interval);
         printf ("thread %2d, between %lu - %lu\n", thread->tid,
-                (size_t) (start_offset + 0.8 * interval), start_offset + interval);
+                (size_t)(start_offset + 0.8 * interval), start_offset + interval);
         thread->stats.Start ();
 
         while (key_iterator.Valid ()) {

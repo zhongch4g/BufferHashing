@@ -18,7 +18,7 @@
 //#define f_seed 0xc70f6907UL
 //#define s_seed 0xc70f6907UL
 
-#define INPLACE
+// #define INPLACE
 
 // #define WITHOUT_FLUSH
 
