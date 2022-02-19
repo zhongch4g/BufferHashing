@@ -59,3 +59,9 @@
 
 sudo numactl -N 0 ./cceh_rec_bench --thread=16 --benchmarks=load --num=60000000 --gChoice=0
 # sudo numactl -N 0 ./cceh_rec_bench --thread=16 --benchmarks=load_recovery --num=60000000 --is_recovery=true >> buffer_wal_test.log
+
+for th in {39..40}
+do
+    # sudo numactl -N 0 ./cceh_bench --thread=$th --num=120000000 --benchmarks=load,readrandom >> ../BufferedCCEH_Improved/CCEH_buflog_Pos_th$th.txt
+    # sudo numactl -N 0 ./cceh_bench --thread=$th --num=120000000 --benchmarks=load,readnon >> results/CCEH_buflog_Neg_th$th.txt
+done
