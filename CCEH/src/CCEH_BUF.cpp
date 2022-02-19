@@ -1,11 +1,14 @@
 #include "CCEH_BUF.h"
+
 #include <stdio.h>
+
 #include <bitset>
 #include <cassert>
 #include <iostream>
 #include <thread>
 #include <unordered_map>
 #include <vector>
+
 #include "hash.h"
 #include "logger.h"
 #include "util.h"

@@ -14,6 +14,8 @@
 
 #define TOID_ARRAY(x) TOID (x)
 
+namespace cceh_buflog {
+
 typedef size_t Key_t;
 typedef const char *Value_t;
 
@@ -198,5 +200,6 @@ public:
 private:
     TOID (struct Directory) dir;
 };
+};  // namespace cceh_buflog
 
 #endif

@@ -16,6 +16,7 @@
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj++/pool.hpp>
 #include <libpmemobj++/transaction.hpp>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -37,6 +38,15 @@ inline void BUFLOG_COMPILER_FENCE () {
 }
 
 namespace buflog {
+
+inline uint64_t get_buffer_size_uniform () {
+    // std::random_device dev;
+    // std::mt19937 rng (dev ());
+    // std::uniform_int_distribution<std::mt19937::result_type> dist6 (
+    //     1, 3);  // distribution in range [1, 6]
+
+    // std::cout << dist6 (rng) << std::endl;
+}
 
 inline std::string print_binary (uint16_t bitmap) {
     char buffer[1024];

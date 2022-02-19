@@ -1,4 +1,4 @@
-#include "CCEH_buflog.h"
+#include "CCEH_buflog_limit.h"
 
 #include <stdio.h>
 
@@ -25,7 +25,7 @@
 #define CONFIG_OUT_OF_PLACE_MERGE
 
 using namespace std;
-using namespace cceh_buflog;
+using namespace cceh_buflog_limit;
 
 // const vector<uint64_t> enum_buffersize = {16, 32, 48};
 const vector<uint64_t> enum_buffersize = {8, 32, 56};
@@ -238,7 +238,11 @@ void CCEH::initCCEH (PMEMobjpool *pop) {
     }
 }
 
-void CCEH::initCCEH (PMEMobjpool *pop, size_t initCap) {
+void CCEH::initCCEH (PMEMobjpool *pop, size_t initCap, uint64_t bufferNum) {
+    bufferConfig.setKBufNumMax (bufferNum);
+    curBufferNum = 0;
+    curSegmentNum = 0;
+
     crashed = true;
     POBJ_ALLOC (pop, &dir, struct Directory, sizeof (struct Directory), NULL, NULL);
     D_RW (dir)->initDirectory (static_cast<size_t> (log2 (initCap)));
@@ -255,17 +259,24 @@ void CCEH::initCCEH (PMEMobjpool *pop, size_t initCap) {
         D_RW (D_RW (D_RW (dir)->segment)[i])->initSegment (static_cast<size_t> (log2 (initCap)));
         D_RW (dir)->bufnodes[i] =
             new WriteBuffer (static_cast<size_t> (log2 (initCap)), enum_buffersize[get_random ()]);
+        // add the number of segments and buffers
+        curBufferNum.fetch_add (1, std::memory_order_relaxed);
+        curSegmentNum.fetch_add (1, std::memory_order_relaxed);
     }
 }
 
-void CCEH::Insert (PMEMobjpool *pop, Key_t &key, Value_t value) {
+bool CCEH::Insert (PMEMobjpool *pop, Key_t &key, Value_t value) {
     auto f_hash = hash_funcs[0](&key, sizeof (Key_t), f_seed);
-
+    bool isMinorCompaction = false;
 retry:
     auto x = (f_hash >> (8 * sizeof (f_hash) - D_RO (dir)->depth));
     auto target = D_RO (D_RO (dir)->segment)[x];
 
     auto *bufnode = D_RO (dir)->bufnodes[x];
+    if (!bufnode) {
+        insert (pop, key, value, true);
+        return isMinorCompaction;
+    }
 
     bufnode->Lock ();
 
@@ -279,6 +290,7 @@ retry:
     if (res) {
         // successfully insert to bufnode
         bufnode->Unlock ();
+        return isMinorCompaction;
     } else {
         // bufnode is full. merge to CCEH
 #ifndef CONFIG_OUT_OF_PLACE_MERGE
@@ -298,6 +310,7 @@ retry:
         bufnode->Unlock ();
         goto retry;
 #else
+        isMinorCompaction = true;
         mergeBufAndSplitWhenNeeded (pop, bufnode, target, f_hash);
         bufnode->Unlock ();
         goto retry;
@@ -412,11 +425,21 @@ RETRY:
     TOID (struct Segment) *s = D_RW (target)->Split (pop);
 
     // After segment split -> create new Writebuffer for split_segment_bufnode
-    WriteBuffer *split_segment_bufnode =
-        new WriteBuffer (D_RW (s[1])->local_depth, enum_buffersize[get_random ()]);
+    WriteBuffer *split_segment_bufnode = nullptr;
+    WriteBuffer *segment_bufnode = nullptr;
     // update new_segment_bufnode local depth
-    WriteBuffer *segment_bufnode = D_RW (dir)->bufnodes[x];
-    segment_bufnode->local_depth = D_RW (s[0])->local_depth;
+    if (D_RW (dir)->bufnodes[x]) {
+        WriteBuffer *segment_bufnode = D_RW (dir)->bufnodes[x];
+        segment_bufnode->local_depth = D_RW (s[0])->local_depth;
+    }
+
+    // 1. check if there has enough buffer
+    if (curBufferNum.load () < bufferConfig.getKBufNumMax ()) {
+        split_segment_bufnode =
+            new WriteBuffer (D_RW (s[1])->local_depth, enum_buffersize[get_random ()]);
+        curBufferNum.fetch_add (1, std::memory_order_relaxed);
+    }
+    curSegmentNum.fetch_add (1, std::memory_order_relaxed);
 
 DIR_RETRY:
     /* need to double the directory */
@@ -593,12 +616,24 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool *pop, WriteBuffer *bufnode, S
         pmemobj_drain (pop);
 
         // create new Writebuffer for split_segment_bufnode
-        WriteBuffer *split_segment_bufnode =
-            new WriteBuffer (split_segment_dram->local_depth, enum_buffersize[get_random ()]);
+        WriteBuffer *split_segment_bufnode = nullptr;
         // update new_segment_bufnode local depth
         auto x = (f_hash >> (8 * sizeof (f_hash) - D_RO (dir)->depth));
-        WriteBuffer *new_segment_bufnode = D_RW (dir)->bufnodes[x];
-        new_segment_bufnode->local_depth = new_segment_dram->local_depth;
+        WriteBuffer *new_segment_bufnode = nullptr;
+
+        // After segment split
+        // update new_segment_bufnode local depth
+        if (D_RW (dir)->bufnodes[x]) {
+            WriteBuffer *new_segment_bufnode = D_RW (dir)->bufnodes[x];
+            new_segment_bufnode->local_depth = new_segment_dram->local_depth;
+        }
+        // 1. check if there has enough buffer
+        if (curBufferNum.load () < bufferConfig.getKBufNumMax ()) {
+            split_segment_bufnode =
+                new WriteBuffer (split_segment_dram->local_depth, enum_buffersize[get_random ()]);
+            curBufferNum.fetch_add (1, std::memory_order_relaxed);
+        }
+        curSegmentNum.fetch_add (1, std::memory_order_relaxed);
 
         // step 3. Set the directory
     MERGE_SPLIT_RETRY:
@@ -791,13 +826,14 @@ RETRY:
     }
 
     char *val;
-    auto res = D_RW (dir)->bufnodes[x]->Get (key, val);
-
-    if (res) {
-        return Value_t (val);
-    } else {
-        return get (key);
+    WriteBuffer *bptr = D_RW (dir)->bufnodes[x];
+    if (bptr) {
+        auto res = D_RW (dir)->bufnodes[x]->Get (key, val);
+        if (res) {
+            return Value_t (val);
+        }
     }
+    return get (key);
 }
 
 Value_t CCEH::get (Key_t &key) {

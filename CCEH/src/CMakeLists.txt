@@ -4,6 +4,8 @@ set(CCEH_SRCS
     # "CCEH_BUF.h"
     "CCEH_buflog.cpp"
     "CCEH_buflog.h"
+    "CCEH_buflog_limit.cpp"
+    "CCEH_buflog_limit.h"
     # "CCEH_BUF_Exchange.cpp"
     # "CCEH_BUF_Exchange.h"
     # "CCEH_BUF_dual.cpp"

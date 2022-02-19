@@ -1,5 +1,6 @@
 key trace size: 720000000
-Randomize the trace...------------------------------------------------
+Randomize the trace...
+------------------------------------------------
 HashType:              CCEH
 Init Capacity:         16777216
 Entries:               720000000
@@ -11,7 +12,8 @@ Report interval:       1 s
 Stats interval:        10000000 records
 benchmarks:            ycsbb
 ------------------------------------------------
-Randomize the trace...[32mStart IPMWatcher for ycsbb
+Randomize the trace...
+[32mStart IPMWatcher for ycsbb
 [0mthread  3, between 540000000 - 720000000
 thread  2, between 360000000 - 540000000
 thread  0, between 0 - 180000000
