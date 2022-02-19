@@ -1,5 +1,5 @@
-#ifndef CCEH_H_
-#define CCEH_H_
+#ifndef CCEH_BUFLOG_H_
+#define CCEH_BUFLOG_H_
 
 #include <libpmemobj.h>
 #include <pthread.h>
@@ -40,12 +40,12 @@ constexpr size_t kSegmentBits = 8;
 constexpr size_t kMask = (1 << kSegmentBits) - 1;
 constexpr size_t kShift = kSegmentBits;
 constexpr size_t kSegmentSize = (1 << kSegmentBits) * 16 * 4;
-constexpr size_t kWriteBufferSize = (kSegmentSize / 2 / 256) * (1 + 0.3);
+constexpr size_t kWriteBufferSize = (kSegmentSize / 2 / 256) * (1 + 0.1);
 constexpr size_t kNumPairPerCacheLine = 4;
 constexpr size_t kNumCacheLine = 8;
 constexpr size_t kCuckooThreshold = 16;
 
-using WriteBuffer = buflog::WriteBuffer<kWriteBufferSize>;
+using WriteBuffer = buflog::WriteBuffer;
 // constexpr size_t kCuckooThreshold = 32;
 
 struct Segment {
@@ -60,7 +60,6 @@ struct Segment {
         }
         local_depth = 0;
         sema = 0;
-        bufnode_ = new WriteBuffer ();
     }
 
     void initSegment (size_t depth) {
@@ -69,7 +68,6 @@ struct Segment {
         }
         local_depth = depth;
         sema = 0;
-        bufnode_ = new WriteBuffer (depth);
     }
 
     bool suspend (void) {
@@ -114,13 +112,14 @@ struct Segment {
     Pair bucket[kNumSlot];
     int64_t sema = 0;
     size_t local_depth;
-    WriteBuffer *bufnode_;
 };
 
 struct Directory {
     static const size_t kDefaultDepth = 10;
 
     TOID_ARRAY (TOID (struct Segment)) segment;
+    WriteBuffer **bufnodes;
+
     int64_t sema = 0;
     size_t capacity;
     size_t depth;

@@ -757,24 +757,6 @@ public:
         meta_.data_ = new_meta.data_;
     }
 
-    inline void insertWithLog (int64_t key, char* val, int i, int oi, uint8_t tag) {
-        kvs_[i].key = key;
-        kvs_[i].val = val;
-        tags_[i] = tag;
-
-        // atomicly set the meta
-        Meta new_meta = meta_;
-        new_meta.valid_ = meta_.valid_ | (1 << i);
-        if (oi != -1) {
-            // reset old pos if this is an update request.
-            new_meta.valid_ ^= (1 << oi);
-        }
-        new_meta.deleted_ = meta_.deleted_ & (~(1 << i));
-
-        BUFLOG_COMPILER_FENCE ();
-        meta_.data_ = new_meta.data_;
-    }
-
     inline bool Get (int64_t key, char*& val) {
         size_t hash = Hasher::hash_int (key);
         return Get (key, val, hash);
@@ -1007,17 +989,25 @@ struct BufVec {
 };
 
 // A group of SortedBufNode
-template <size_t NUM>
 class WriteBuffer {
-public:
     // static_assert(__builtin_popcount(NUM) == 1, "NUM should be power of 2");
-    static constexpr size_t kNodeNumMask = NUM - 1;
-    static constexpr size_t kNodeNum = NUM;
-    static constexpr size_t kProbeLen = (NUM / 2 - 1) < 4 ? 3 : (NUM / 2 - 1);
+    // static constexpr size_t kNodeNumMask = NUM - 1;
+    // static constexpr size_t kNodeNum = NUM;
+    // static constexpr size_t kProbeLen = (NUM / 2 - 1) < 4 ? 3 : (NUM / 2 - 1);
+public:
+    size_t kNodeNum;
+    size_t kProbeLen;
+    std::vector<SortedBufNode> nodes_;
+    AtomicSpinLock lock_;
+    size_t local_depth;
 
     WriteBuffer () { local_depth = 0; }
 
-    WriteBuffer (size_t d) { local_depth = d; }
+    WriteBuffer (size_t d, int num) : nodes_ (num) {
+        local_depth = d;
+        kNodeNum = num;
+        kProbeLen = num / 2 - 1;
+    }
 
     inline bool Put (int64_t key, char* val) {
         size_t hash = Hasher::hash_int (key);
@@ -1027,7 +1017,7 @@ public:
         int slot_to_insert = -1;
         for (int p = 0; p < kProbeLen; ++p) {
             // int idx = (hash + p) & kNodeNumMask;
-            int idx = (hash + p) % NUM;
+            int idx = (hash + p) % kNodeNum;
             SortedBufNode& bucket = nodes_[idx];
             auto empty_bitset = bucket.EmptyBitSet ();
 
@@ -1072,7 +1062,7 @@ public:
         int slot_to_insert = -1;
         for (int p = 0; p < kProbeLen; ++p) {
             // int idx = (hash + p) & kNodeNumMask;
-            int idx = (hash + p) % NUM;
+            int idx = (hash + p) % kNodeNum;
             SortedBufNode& bucket = nodes_[idx];
             auto empty_bitset = bucket.EmptyBitSet ();
 
@@ -1105,7 +1095,7 @@ public:
             return false;
         }
 
-        nodes_[bucket_to_insert].insertWithLog (key, val, slot_to_insert, old_i, tag);
+        nodes_[bucket_to_insert].insert (key, val, slot_to_insert, old_i, tag);
         return true;
     }
 
@@ -1114,7 +1104,7 @@ public:
         uint8_t tag = hash & 0xFF;
         for (int p = 0; p < kProbeLen; ++p) {
             // int idx = (hash + p) & kNodeNumMask;
-            int idx = (hash + p) % NUM;
+            int idx = (hash + p) % kNodeNum;
             SortedBufNode& bucket = nodes_[idx];
 
             for (int i : bucket.MatchBitSet (tag)) {
@@ -1138,7 +1128,7 @@ public:
         size_t tag = hash & 0xFF;
         for (int p = 0; p < kProbeLen; ++p) {
             // int idx = (hash + p) & kNodeNumMask;
-            int idx = (hash + p) % NUM;
+            int idx = (hash + p) % kNodeNum;
             SortedBufNode& bucket = nodes_[idx];
 
             for (int i : bucket.MatchBitSet (tag)) {
@@ -1167,16 +1157,19 @@ public:
             nodes_[i].Reset ();
         }
     }
+
     class Iterator {
+        WriteBuffer* wb_;
+        size_t cur_;
+        SortedBufNode::Iterator iter;
+
     public:
-        Iterator (WriteBuffer<kNodeNum>* wb) : wb_ (wb), cur_ (0), iter (wb_->nodes_[0].Begin ()) {
+        Iterator (WriteBuffer* wb) : wb_ (wb), cur_ (0), iter (wb_->nodes_[0].Begin ()) {
             toNextValidIter ();
         }
 
-        inline bool Valid (void) { return iter.Valid () || cur_ < kNodeNum; }
-
+        inline bool Valid (void) { return iter.Valid () || cur_ < wb_->kNodeNum; }
         KV& operator* () const { return *iter; }
-
         KV* operator-> () const { return &(*iter); }
 
         // Prefix ++ overload
@@ -1189,24 +1182,17 @@ public:
         }
 
         void toNextValidIter (void) {
-            while (!iter.Valid () && cur_ < kNodeNum) {
+            while (!iter.Valid () && cur_ < wb_->kNodeNum) {
                 cur_++;
-                if (cur_ == kNodeNum) {
+                if (cur_ == wb_->kNodeNum) {
                     break;
                 }
                 iter = wb_->nodes_[cur_].Begin ();
             }
         }
-        WriteBuffer<kNodeNum>* wb_;
-        SortedBufNode::Iterator iter;
-        int cur_;
     };
 
     Iterator Begin () { return Iterator (this); }
-
-    SortedBufNode nodes_[NUM];
-    AtomicSpinLock lock_;
-    size_t local_depth;
 };
 
 };  // end of namespace buflog

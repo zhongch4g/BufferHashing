@@ -1,7 +1,11 @@
 #ifndef CCEH_BUF_EXCHANGE_H_
 #define CCEH_BUF_EXCHANGE_H_
 
+#include <libpmemobj.h>
 #include <pthread.h>
+#include <sys/time.h>
+#include <time.h>
+
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -10,9 +14,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include <libpmemobj.h>
-#include <sys/time.h>
-#include <time.h>
+// #include "../../src/buflog_variable_bufsize.h"
 #include "../../src/buflog.h"
 #include "util.h"
 

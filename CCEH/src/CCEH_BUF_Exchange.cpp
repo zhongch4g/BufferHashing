@@ -1,10 +1,13 @@
 #include "CCEH_BUF_Exchange.h"
+
 #include <stdio.h>
+
 #include <bitset>
 #include <cassert>
 #include <iostream>
 #include <thread>
 #include <vector>
+
 #include "hash.h"
 #include "logger.h"
 #include "util.h"
@@ -21,7 +24,6 @@
 #define CONFIG_OUT_OF_PLACE_MERGE
 
 using namespace std;
-
 
 bool Segment::initSegment (CCEH* _cceh) {
     for (size_t i = 0; i < kNumSlot; ++i) {
