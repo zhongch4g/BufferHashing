@@ -834,7 +834,8 @@ public:
                 size_t ikey = key_iterator.Next ();
                 D_RW (hashtable_)->Insert (pop_, ikey, reinterpret_cast<Value_t> (ikey));
             }
-            thread->stats.FinishedBatchOp (j);
+            bool res = thread->stats.FinishedBatchOp (j);
+            if (!res) printf ("[]%lu\n", D_RW (hashtable_)->curBufferNum.load ());
         }
 
         thread->stats.real_finish_ = NowMicros ();

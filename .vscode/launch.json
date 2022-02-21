@@ -9,9 +9,9 @@
             "type": "cppdbg",
             "request": "launch",
             // "program": "${workspaceFolder}/CCEH-BUFLOG/debug/ccehex_bench",
-            "program": "${workspaceFolder}/debug/cceh_rec_bench",
+            "program": "${workspaceFolder}/debug/cceh_bench",
             "args": [
-                "--thread=1", "--benchmarks=load", "--num=1000000"
+                "--thread=1", "--benchmarks=load", "--num=120000000"
             ],
             "stopAtEntry": false,
             "cwd": "${fileDirname}",

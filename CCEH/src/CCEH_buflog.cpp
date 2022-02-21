@@ -254,7 +254,8 @@ void CCEH::initCCEH (PMEMobjpool *pop, size_t initCap) {
                     NULL, NULL);
         D_RW (D_RW (D_RW (dir)->segment)[i])->initSegment (static_cast<size_t> (log2 (initCap)));
         D_RW (dir)->bufnodes[i] =
-            new WriteBuffer (static_cast<size_t> (log2 (initCap)), enum_buffersize[get_random ()]);
+            new WriteBuffer (static_cast<size_t> (log2 (initCap)), 32 * (1 + 0.3));
+        curSegmentNum.fetch_add (1, std::memory_order_relaxed);
     }
 }
 
@@ -270,6 +271,8 @@ retry:
     bufnode->Lock ();
 
     if (D_RO (target)->local_depth != bufnode->local_depth) {
+        // printf ("D_RO (target)->local_depth =%lu bufnode->local_depth = %lu\n",
+        //         D_RO (target)->local_depth, bufnode->local_depth);
         bufnode->Unlock ();
         std::this_thread::yield ();
         goto retry;
@@ -280,6 +283,7 @@ retry:
         // successfully insert to bufnode
         bufnode->Unlock ();
     } else {
+        curMCNum.fetch_add (1, std::memory_order_relaxed);
         // bufnode is full. merge to CCEH
 #ifndef CONFIG_OUT_OF_PLACE_MERGE
         auto iter = bufnode->Begin ();
@@ -412,11 +416,15 @@ RETRY:
     TOID (struct Segment) *s = D_RW (target)->Split (pop);
 
     // After segment split -> create new Writebuffer for split_segment_bufnode
-    WriteBuffer *split_segment_bufnode =
-        new WriteBuffer (D_RW (s[1])->local_depth, enum_buffersize[get_random ()]);
+    WriteBuffer *split_segment_bufnode = new WriteBuffer (D_RW (s[1])->local_depth, 32 * (1 + 0.3));
     // update new_segment_bufnode local depth
     WriteBuffer *segment_bufnode = D_RW (dir)->bufnodes[x];
+#ifdef INPLACE
+    segment_bufnode->local_depth = D_RW (s[0])->local_depth + 1;
+#else
     segment_bufnode->local_depth = D_RW (s[0])->local_depth;
+#endif
+    curSegmentNum.fetch_add (1, std::memory_order_relaxed);
 
 DIR_RETRY:
     /* need to double the directory */
@@ -594,12 +602,12 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool *pop, WriteBuffer *bufnode, S
 
         // create new Writebuffer for split_segment_bufnode
         WriteBuffer *split_segment_bufnode =
-            new WriteBuffer (split_segment_dram->local_depth, enum_buffersize[get_random ()]);
+            new WriteBuffer (split_segment_dram->local_depth, 32 * (1 + 0.3));
         // update new_segment_bufnode local depth
         auto x = (f_hash >> (8 * sizeof (f_hash) - D_RO (dir)->depth));
         WriteBuffer *new_segment_bufnode = D_RW (dir)->bufnodes[x];
         new_segment_bufnode->local_depth = new_segment_dram->local_depth;
-
+        curSegmentNum.fetch_add (1, std::memory_order_relaxed);
         // step 3. Set the directory
     MERGE_SPLIT_RETRY:
         if (D_RO (target)->local_depth == D_RO (dir)->depth) {  // need double the directory

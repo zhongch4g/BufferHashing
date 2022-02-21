@@ -494,11 +494,8 @@ public:
             return;
         }
 
-        size_t interval = num_ / FLAGS_thread;
-        size_t start_offset = thread->tid * interval;
-        auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
-        // size_t start_offset = random () % trace_size_;
-        // auto key_iterator = key_trace_->trace_at (start_offset, trace_size_);
+        size_t start_offset = random () % trace_size_;
+        auto key_iterator = key_trace_->trace_at (start_offset, trace_size_);
         size_t not_find = 0;
 
         Duration duration (FLAGS_readtime, reads_);
@@ -689,7 +686,15 @@ public:
                 size_t ikey = key_iterator.Next ();
                 D_RW (hashtable_)->Insert (pop_, ikey, reinterpret_cast<Value_t> (ikey));
             }
-            thread->stats.FinishedBatchOp (j);
+            bool res = thread->stats.FinishedBatchOp (j);
+            if (!res) {
+                if (thread->tid == 0) {
+                    printf ("[SN]%lu\n",
+                            D_RW (hashtable_)->curSegmentNum.load (std::memory_order_relaxed));
+                    printf ("[MC]%lu\n",
+                            D_RW (hashtable_)->curMCNum.load (std::memory_order_relaxed));
+                }
+            }
         }
 
         thread->stats.real_finish_ = NowMicros ();

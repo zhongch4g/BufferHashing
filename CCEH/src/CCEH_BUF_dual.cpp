@@ -24,6 +24,7 @@
 #define CONFIG_OUT_OF_PLACE_MERGE
 
 using namespace std;
+using namespace buflog_dual;
 
 std::atomic<int32_t> validBuffer (0);
 bool validBufferFlag = false;  // did not finished the initialization
@@ -52,7 +53,7 @@ bool Segment::initSegment (size_t depth, CCEH* _cceh) {
     if (!validBufferFlag) {
         int32_t vb = validBuffer.fetch_sub (1, std::memory_order_relaxed);
         if (vb > 0) {
-            bufnode_ = new WriteBuffer (depth);
+            bufnode_ = new WriteBuffer (depth, 32 * (1 + 0.3));
             buf_flag = true;
             cceh->curBufferNum.fetch_add (1, std::memory_order_relaxed);
             return true;
@@ -327,7 +328,7 @@ bool CCEH::increaseBuffer () {
 
     // 2. merge the buffer to segment
     if (target_ptr && !target_ptr->buf_flag) {
-        target_ptr->bufnode_ = new WriteBuffer (target_ptr->local_depth);
+        target_ptr->bufnode_ = new WriteBuffer (target_ptr->local_depth, 32 + (1 + 0.3));
         balance.fetch_add (1);
         curBufferNum.fetch_add (1);
         if (itlow == bufferConfig.noBufferIndexSet->end ()) {
@@ -1183,7 +1184,7 @@ void CCEH::transferBuffer () {
             bufferConfig.bufferIndexSet->insert (i);
         } else {
             if (validBuffer.load (std::memory_order_relaxed) <= 1) break;
-            target_ptr->bufnode_ = new WriteBuffer (target_ptr->local_depth);
+            target_ptr->bufnode_ = new WriteBuffer (target_ptr->local_depth, 32 + (1 + 0.3));
             balance.fetch_add (1);
             curBufferNum.fetch_add (1);
             bufferConfig.bufferIndexSet->insert (i);

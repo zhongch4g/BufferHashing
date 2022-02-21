@@ -30,6 +30,7 @@ using namespace std;
 #define CONFIG_OUT_OF_PLACE_MERGE
 
 using namespace std;
+using namespace buflog_recovery;
 
 void Segment::execute_path (PMEMobjpool *pop, vector<pair<size_t, size_t>> &path, Key_t &key,
                             Value_t value) {
@@ -238,18 +239,19 @@ void CCEH::initCCEH (pmem::obj::pool<CCEH> pop, size_t initCap, size_t nthreads)
         D_RW (D_RW (D_RW (dir)->segment)[i])
             ->initSegment (pop, static_cast<size_t> (log2 (initCap)));
     }
-    // transaction::run (pop, [&] () {
-    //     // Get the base address of the pool
-    //     void* baseAddr = pop.handle ();
-    //     INFO ("The base address = %p \n", baseAddr);
-    //     if (BufferLogNodes == nullptr) {
-    //         pop.root ()->BufferLogNodes = make_persistent<BufferLogNode[]> (nthreads);
-    //         for (size_t j = 0; j < nthreads; j++) {
-    //             pop.root ()->BufferLogNodes[j].Create (1024 * 1024 * 1024 * 1);
-    //             DEBUG ("Log[%d] create successfully \n", j);
-    //         }
-    //     }
-    // });
+    pmem::obj::transaction::run (pop, [&] () {
+        // Get the base address of the pool
+        void *baseAddr = pop.handle ();
+        INFO ("The base address = %p \n", baseAddr);
+        if (BufferLogNodes == nullptr) {
+            pop.root ()->BufferLogNodes =
+                pmem::obj::make_persistent<buflog::linkedredolog::BufferLogNode[]> (nthreads);
+            for (size_t j = 0; j < nthreads; j++) {
+                pop.root ()->BufferLogNodes[j].Create (1024 * 1024 * 1024 * 1);
+                DEBUG ("Log[%d] create successfully \n", j);
+            }
+        }
+    });
 }
 
 void CCEH::InsertWithLog (pmem::obj::pool<CCEH> pop, Key_t &key, Value_t value, int tid) {
@@ -266,7 +268,7 @@ retry:
         // DEBUG ("logptr -> %lu \n", ptr->logPtr->getData ());
         uint64_t logid = target_ptr->logPtr->getLogId ();
         uint64_t offset = target_ptr->logPtr->getOffset ();
-        target_ptr->bufnode_ = new WriteBuffer (target_ptr->local_depth);
+        target_ptr->bufnode_ = new WriteBuffer (target_ptr->local_depth, 32 + (1 + 0.3));
 
         auto iterRecover = pop.root ()->BufferLogNodes[logid].lBeginRecover (offset);
         if (iterRecover.Valid ()) {
@@ -291,20 +293,19 @@ retry:
     bool res = target_ptr->bufnode_->PutWithLog (key, (char *)value);
 
     if (res) {
-        // transaction::run (pop, [&] () {
-        //     auto data = target_ptr->logPtr->getData ();
-        //     auto next_ = 0;
-        //     // data == 256 means it is the first time to use this buffer
-        //     if (data == 256) {
-        //         next_ = pop.root ()->BufferLogNodes[tid].Append (buflog::kDataLogNodeCheckpoint,
-        //                                                          key, (uint64_t)value, data,
-        //                                                          true);
-        //     } else {
-        //         next_ = pop.root ()->BufferLogNodes[tid].Append (buflog::kDataLogNodeValid, key,
-        //                                                          (uint64_t)value, data, true);
-        //     }
-        //     target_ptr->logPtr->setData (tid, next_);
-        // });
+        pmem::obj::transaction::run (pop, [&] () {
+            auto data = target_ptr->logPtr->getData ();
+            auto next_ = 0;
+            // data == 256 means it is the first time to use this buffer
+            if (data == 256) {
+                next_ = pop.root ()->BufferLogNodes[tid].Append (buflog::kDataLogNodeCheckpoint,
+                                                                 key, (uint64_t)value, data, true);
+            } else {
+                next_ = pop.root ()->BufferLogNodes[tid].Append (buflog::kDataLogNodeValid, key,
+                                                                 (uint64_t)value, data, true);
+            }
+            target_ptr->logPtr->setData (tid, next_);
+        });
 
         // successfully insert to bufnode
         target_ptr->bufnode_->Unlock ();
@@ -973,7 +974,7 @@ void CCEH::BufferRecovery1 (pmem::obj::pool<CCEH> pop, uint64_t nthread) {
 
         // printf ("data %lu id %lu offset %lu \n", ptr->logPtr->getData (), logid, offset);
 
-        ptr->bufnode_ = new WriteBuffer (ptr->local_depth);
+        ptr->bufnode_ = new WriteBuffer (ptr->local_depth, 32 + (1 + 0.3));
         if (pop.root ()->BufferLogNodes[logid].Valid (offset)) {
             uint64_t nid = logid;
             uint64_t noffset = offset;
@@ -1006,51 +1007,40 @@ inline uint64_t NowMicros () {
     return static_cast<uint64_t> (tv.tv_sec) * kUsecondsPerSecond + tv.tv_usec;
 }
 
-void CCEH::BufferRecovery2 (pmem::obj::pool<CCEH> pop, uint64_t nthread, int tid,
-                            vector<uint64_t> segidx) {
+void CCEH::BufferRecovery2 (pmem::obj::pool<CCEH> pop, uint64_t nthread, int tid) {
     uint64_t start1_ = NowMicros ();
     // ensure the consistent of the directory entries
     DEBUG ("Start Recovery Buffer ..");
-    // size_t i = 0;
-    size_t cntRecovery = 0;
-    auto dirptr = D_RO (dir);
-    size_t s = segidx.size ();
-    size_t epoch = s / nthread;
-    uint64_t start = epoch * tid;
-    uint64_t end = epoch * (tid + 1);
-    printf ("start = %lu, end = %lu \n", start, end);
+    uint64_t cntRecovery = 0;
 
     pop.root ()->BufferLogNodes[tid].Open ();
 
-    while (start < end) {
-        if (segidx[start] >= dirptr->capacity) {
-            break;
+    char *start = pop.root ()->BufferLogNodes[tid].log.get () + 256 + 17;
+    uint64_t test = 256 + 17;
+    while (1) {
+        uint64_t key = *(uint64_t *)(start - 16);
+        uint64_t val = *(uint64_t *)(start - 8);
+        uint8_t tag = *(uint8_t *)(start);
+        // printf ("tag = %hhu \n", tag);
+        if (tag != 16 && tag != 18) break;
+
+        auto f_hash = hash_funcs[0](&key, sizeof (Key_t), f_seed);
+        auto x = (f_hash >> (8 * sizeof (f_hash) - D_RO (dir)->depth));
+        auto target = D_RO (D_RO (dir)->segment)[x];
+        auto target_ptr = D_RW (target);
+        if (!target_ptr->buf_flag) {
+            target_ptr->bufnode_ = new WriteBuffer (target_ptr->local_depth, 32 + (1 + 0.3));
+            target_ptr->buf_flag = true;
         }
+        target_ptr->bufnode_->PutWithLog (key, (char *)val);
 
-        auto ptr = D_RW (D_RW (D_RW (dir)->segment)[segidx[start]]);
-        uint64_t logid = ptr->logPtr->getLogId ();
-        uint64_t offset = ptr->logPtr->getOffset ();
-
-        ptr->bufnode_ = new WriteBuffer (ptr->local_depth);
-        uint64_t nid = logid;
-        uint64_t noffset = offset;
-        uint64_t d = 0;
-        do {
-            char *currentAddr = pop.root ()->BufferLogNodes[nid].currentAddr (noffset);
-            uint64_t key = *(uint64_t *)(currentAddr - 16);
-            char *val = (char *)(currentAddr - 8);
-            ptr->bufnode_->Put (key, val);
-
-            uint64_t data = *(uint64_t *)(currentAddr + 2);
-            d = data;
-            nid = data >> 48;
-            noffset = data & 0x0000FFFFFFFFFFFF;
-
-            cntRecovery++;
-
-        } while (pop.root ()->BufferLogNodes[nid].IsValidPoint (noffset) && (d != 0));
-        start++;
+        start = start + 27;
+        test += 27;
+        cntRecovery++;
     }
+
+    // ptr->bufnode_ = new WriteBuffer (ptr->local_depth, 32 + (1 + 0.3));
+
     uint64_t end1_ = NowMicros ();
     printf ("Finished Recovery in %2.10f secs (total = %lu) \n", (end1_ - start1_) / 1000000.0,
             cntRecovery);

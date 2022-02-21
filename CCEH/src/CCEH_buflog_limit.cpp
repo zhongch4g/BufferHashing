@@ -239,7 +239,9 @@ void CCEH::initCCEH (PMEMobjpool *pop) {
 }
 
 void CCEH::initCCEH (PMEMobjpool *pop, size_t initCap, uint64_t bufferNum) {
-    bufferConfig.setKBufNumMax (bufferNum);
+    bufferConfig = (BufferConfig *)malloc (sizeof (BufferConfig));
+    bufferConfig->setKBufNumMax (bufferNum);
+    INFO ("Preset MAX number of buffers = %lu \n", bufferNum);
     curBufferNum = 0;
     curSegmentNum = 0;
 
@@ -257,10 +259,12 @@ void CCEH::initCCEH (PMEMobjpool *pop, size_t initCap, uint64_t bufferNum) {
         POBJ_ALLOC (pop, &D_RO (D_RO (dir)->segment)[i], struct Segment, sizeof (struct Segment),
                     NULL, NULL);
         D_RW (D_RW (D_RW (dir)->segment)[i])->initSegment (static_cast<size_t> (log2 (initCap)));
-        D_RW (dir)->bufnodes[i] =
-            new WriteBuffer (static_cast<size_t> (log2 (initCap)), enum_buffersize[get_random ()]);
-        // add the number of segments and buffers
-        curBufferNum.fetch_add (1, std::memory_order_relaxed);
+        if (curBufferNum.load () < bufferConfig->getKBufNumMax ()) {
+            D_RW (dir)->bufnodes[i] =
+                new WriteBuffer (static_cast<size_t> (log2 (initCap)), 32 + (1 + 0.3));
+            // add the number of segments and buffers
+            curBufferNum.fetch_add (1, std::memory_order_relaxed);
+        }
         curSegmentNum.fetch_add (1, std::memory_order_relaxed);
     }
 }
@@ -273,7 +277,7 @@ retry:
     auto target = D_RO (D_RO (dir)->segment)[x];
 
     auto *bufnode = D_RO (dir)->bufnodes[x];
-    if (!bufnode) {
+    if (bufnode == nullptr) {
         insert (pop, key, value, true);
         return isMinorCompaction;
     }
@@ -428,18 +432,19 @@ RETRY:
     WriteBuffer *split_segment_bufnode = nullptr;
     WriteBuffer *segment_bufnode = nullptr;
     // update new_segment_bufnode local depth
-    if (D_RW (dir)->bufnodes[x]) {
-        WriteBuffer *segment_bufnode = D_RW (dir)->bufnodes[x];
+    if (D_RW (dir)->bufnodes[x] != nullptr) {
+        segment_bufnode = D_RW (dir)->bufnodes[x];
         segment_bufnode->local_depth = D_RW (s[0])->local_depth;
     }
 
     // 1. check if there has enough buffer
-    if (curBufferNum.load () < bufferConfig.getKBufNumMax ()) {
-        split_segment_bufnode =
-            new WriteBuffer (D_RW (s[1])->local_depth, enum_buffersize[get_random ()]);
+    if (curBufferNum.load () < bufferConfig->getKBufNumMax ()) {
+        split_segment_bufnode = new WriteBuffer (D_RW (s[1])->local_depth, 32 + (1 + 0.3));
         curBufferNum.fetch_add (1, std::memory_order_relaxed);
+        // INFO ("Current number of buffers = %lu\n", curBufferNum.load ());
     }
     curSegmentNum.fetch_add (1, std::memory_order_relaxed);
+    // INFO ("Current number of segments = %lu\n", curSegmentNum.load ());
 
 DIR_RETRY:
     /* need to double the directory */
@@ -623,17 +628,19 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool *pop, WriteBuffer *bufnode, S
 
         // After segment split
         // update new_segment_bufnode local depth
-        if (D_RW (dir)->bufnodes[x]) {
-            WriteBuffer *new_segment_bufnode = D_RW (dir)->bufnodes[x];
+        if (D_RW (dir)->bufnodes[x] != nullptr) {
+            new_segment_bufnode = D_RW (dir)->bufnodes[x];
             new_segment_bufnode->local_depth = new_segment_dram->local_depth;
         }
         // 1. check if there has enough buffer
-        if (curBufferNum.load () < bufferConfig.getKBufNumMax ()) {
+        if (curBufferNum.load () < bufferConfig->getKBufNumMax ()) {
             split_segment_bufnode =
-                new WriteBuffer (split_segment_dram->local_depth, enum_buffersize[get_random ()]);
+                new WriteBuffer (split_segment_dram->local_depth, 32 + (1 + 0.3));
             curBufferNum.fetch_add (1, std::memory_order_relaxed);
+            // INFO ("Current number of buffers = %lu\n", curBufferNum.load ());
         }
         curSegmentNum.fetch_add (1, std::memory_order_relaxed);
+        // INFO ("Current number of segments = %lu\n", curSegmentNum.load ());
 
         // step 3. Set the directory
     MERGE_SPLIT_RETRY:

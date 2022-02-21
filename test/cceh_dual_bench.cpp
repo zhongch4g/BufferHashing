@@ -28,7 +28,7 @@
 using GFLAGS_NAMESPACE::ParseCommandLineFlags;
 using GFLAGS_NAMESPACE::RegisterFlagValidator;
 using GFLAGS_NAMESPACE::SetUsageMessage;
-using namespace dualcceh;
+using namespace buflog_dual;
 
 DEFINE_int32 (initsize, 16, "initial capacity in million");
 DEFINE_string (filepath, "/mnt/pmem/objpool.data", "");
@@ -248,7 +248,8 @@ public:
         //         elapsed * 1e6 / done_, throughput / 1024 / 1024, (extra.empty () ? "" : " "),
         //         extra.c_str ());
 
-        printf ("%-12s %llu operations, %2.2f real_elapsed , %2.2f Mops/s\n", name.ToString ().c_str (), done_, elapsed, throughput / 1024 / 1024);
+        printf ("%-12s %llu operations, %2.2f real_elapsed , %2.2f Mops/s\n",
+                name.ToString ().c_str (), done_, elapsed, throughput / 1024 / 1024);
 
         if (print_hist) {
             fprintf (stdout, "Nanoseconds per op:\n%s\n", hist_.ToString ().c_str ());
@@ -921,7 +922,7 @@ public:
 
         thread->stats.Start ();
         Duration duration (FLAGS_readtime, reads_);
-        while (!duration.Done(batch) && key_iterator.Valid ()) {
+        while (!duration.Done (batch) && key_iterator.Valid ()) {
             uint64_t j = 0;
             for (; j < batch && key_iterator.Valid (); j++) {
                 size_t ikey = key_iterator.Next ();
@@ -949,7 +950,7 @@ public:
             }
             // check every 10,000 ops
             bool timOrOps = thread->stats.FinishedBatchOp (j);
-            
+
             // execute every second
             if (!timOrOps) {
                 if (thread->tid < nthread) {  // 0
@@ -985,12 +986,13 @@ public:
                             D_RW (hashtable1_)->curBufferNum.load (std::memory_order_relaxed) *
                             1.0 / D_RW (hashtable1_)->curSegnumNum.load (std::memory_order_relaxed);
 
-                        if (gap0 * bufferRate0 > (gap1 * bufferRate1 * 1.05)) {  // increase 0 buffer
-                            D_RW (hashtable1_)->balance.fetch_add ((uint32_t) (gap1 * bufferRate1));
-                            D_RW (hashtable0_)->balance.fetch_sub ((uint32_t) (gap1 * bufferRate1));
+                        if (gap0 * bufferRate0 >
+                            (gap1 * bufferRate1 * 1.05)) {  // increase 0 buffer
+                            D_RW (hashtable1_)->balance.fetch_add ((uint32_t)(gap1 * bufferRate1));
+                            D_RW (hashtable0_)->balance.fetch_sub ((uint32_t)(gap1 * bufferRate1));
                         } else if ((1.05 * gap0 * bufferRate0) < gap1 * bufferRate1) {
-                            D_RW (hashtable0_)->balance.fetch_add ((uint32_t) (gap0 * bufferRate0));
-                            D_RW (hashtable1_)->balance.fetch_sub ((uint32_t) (gap0 * bufferRate0));
+                            D_RW (hashtable0_)->balance.fetch_add ((uint32_t)(gap0 * bufferRate0));
+                            D_RW (hashtable1_)->balance.fetch_sub ((uint32_t)(gap0 * bufferRate0));
                         }
                     }
                 }
@@ -1041,20 +1043,20 @@ public:
             //     printf ("%u,%u,%u\n", h0, h1, h0 + h1);
             // }
 
-            if (thread->tid == 8){
+            if (thread->tid == 8) {
                 printf ("[Number of Segments]%u,%u \n",
                         D_RW (hashtable0_)->curSegnumNum.load (std::memory_order_relaxed),
                         D_RW (hashtable1_)->curSegnumNum.load (std::memory_order_relaxed));
                 printf ("[Number of Buffers]%u,%u \n",
-                D_RW (hashtable0_)->curBufferNum.load (std::memory_order_relaxed),
-                D_RW (hashtable1_)->curBufferNum.load (std::memory_order_relaxed));
+                        D_RW (hashtable0_)->curBufferNum.load (std::memory_order_relaxed),
+                        D_RW (hashtable1_)->curBufferNum.load (std::memory_order_relaxed));
             }
         }
         thread->stats.real_finish_ = NowMicros ();
         if (thread->tid >= nthread) {
             // printf ("thread->tid = %d \n", thread->tid);
             uint32_t cnt = releaseCount1_.fetch_add (1, std::memory_order_relaxed);
-            if (cnt == nthread-1) {
+            if (cnt == nthread - 1) {
                 // D_RW (hashtable1_)->releaseAllBuffers ();
                 int32_t numbuf = D_RW (hashtable1_)->curBufferNum.load (std::memory_order_relaxed);
                 D_RW (hashtable1_)->curBufferNum.store (0);
@@ -1072,8 +1074,6 @@ public:
                 D_RW (hashtable1_)->curSegnumNum.load (std::memory_order_relaxed));
         return;
     }
-
-
 
     void DualCCEH2 (ThreadState* thread) {
         uint64_t batch = FLAGS_batch;
@@ -1104,13 +1104,15 @@ public:
 
         thread->stats.Start ();
         Duration duration (FLAGS_readtime, reads_);
-        while (!duration.Done(batch) && key_iterator.Valid ()) {
+        while (!duration.Done (batch) && key_iterator.Valid ()) {
             uint64_t j = 0;
             for (; j < batch && key_iterator.Valid (); j++) {
                 size_t ikey = key_iterator.Next ();
                 if (thread->tid < nthread) {
                     identifier0++;
-                    if (identifier0 % 12000000 == 0) {flag0 = !flag0;}
+                    if (identifier0 % 12000000 == 0) {
+                        flag0 = !flag0;
+                    }
                     if (flag0) {
                         D_RW (hashtable0_)->Insert (pop0_, ikey, reinterpret_cast<Value_t> (ikey));
                         writes0_++;
@@ -1119,7 +1121,9 @@ public:
                     }
                 } else if (thread->tid >= nthread) {
                     identifier1++;
-                    if (identifier1 % 12000000 == 0) {flag1 = !flag1;}
+                    if (identifier1 % 12000000 == 0) {
+                        flag1 = !flag1;
+                    }
                     if (flag1) {
                         D_RW (hashtable1_)->Insert (pop1_, ikey, reinterpret_cast<Value_t> (ikey));
                         writes1_++;
@@ -1133,7 +1137,7 @@ public:
             }
             // check every 10,000 ops
             bool timOrOps = thread->stats.FinishedBatchOp (j);
-            
+
             // execute every second
             if (!timOrOps) {
                 if (thread->tid < nthread) {  // 0
@@ -1158,11 +1162,11 @@ public:
                     // TODO : ACTION
                     if (validBufferFlag) {
                         if (writeRate0 > (writeRate1 * 1.05)) {  // increase 0 buffer
-                            D_RW (hashtable1_)->balance.fetch_add ((uint32_t) (20));
-                            D_RW (hashtable0_)->balance.fetch_sub ((uint32_t) (20));
+                            D_RW (hashtable1_)->balance.fetch_add ((uint32_t)(20));
+                            D_RW (hashtable0_)->balance.fetch_sub ((uint32_t)(20));
                         } else if ((1.05 * writeRate0) < writeRate1) {
-                            D_RW (hashtable0_)->balance.fetch_add ((uint32_t) (20));
-                            D_RW (hashtable1_)->balance.fetch_sub ((uint32_t) (20));
+                            D_RW (hashtable0_)->balance.fetch_add ((uint32_t)(20));
+                            D_RW (hashtable1_)->balance.fetch_sub ((uint32_t)(20));
                         }
                     }
                 }
@@ -1213,13 +1217,13 @@ public:
             //     printf ("%u,%u,%u\n", h0, h1, h0 + h1);
             // }
 
-            if (thread->tid == 8){
+            if (thread->tid == 8) {
                 printf ("[Number of Segments]%u,%u \n",
                         D_RW (hashtable0_)->curSegnumNum.load (std::memory_order_relaxed),
                         D_RW (hashtable1_)->curSegnumNum.load (std::memory_order_relaxed));
                 printf ("[Number of Buffers]%u,%u \n",
-                D_RW (hashtable0_)->curBufferNum.load (std::memory_order_relaxed),
-                D_RW (hashtable1_)->curBufferNum.load (std::memory_order_relaxed));
+                        D_RW (hashtable0_)->curBufferNum.load (std::memory_order_relaxed),
+                        D_RW (hashtable1_)->curBufferNum.load (std::memory_order_relaxed));
             }
         }
         thread->stats.real_finish_ = NowMicros ();
@@ -1228,9 +1232,9 @@ public:
         //     uint32_t cnt = releaseCount1_.fetch_add (1, std::memory_order_relaxed);
         //     if (cnt == nthread-1) {
         //         // D_RW (hashtable1_)->releaseAllBuffers ();
-        //         int32_t numbuf = D_RW (hashtable1_)->curBufferNum.load (std::memory_order_relaxed);
-        //         D_RW (hashtable1_)->curBufferNum.store (0);
-        //         D_RW (hashtable1_)->balance.fetch_add (numbuf, std::memory_order_relaxed);
+        //         int32_t numbuf = D_RW (hashtable1_)->curBufferNum.load
+        //         (std::memory_order_relaxed); D_RW (hashtable1_)->curBufferNum.store (0); D_RW
+        //         (hashtable1_)->balance.fetch_add (numbuf, std::memory_order_relaxed);
         //         validBuffer.fetch_add (numbuf, std::memory_order_relaxed);
         //         D_RW (hashtable0_)->balance.fetch_sub (numbuf, std::memory_order_relaxed);
 
@@ -1254,9 +1258,9 @@ public:
             perror ("DoWrite lack key_trace_ initialization.");
         }
         int nthread = FLAGS_thread / FLAGS_ins_num;  // 4 how many threads each CCEH
-        uint32_t interval = num_ / nthread;            // cut the trace to num_/1M parts
+        uint32_t interval = num_ / nthread;          // cut the trace to num_/1M parts
         size_t start_offset = (thread->tid % nthread) * interval;
-        printf("type %f \n", thread->tid * 1.0 / nthread);
+        printf ("type %f \n", thread->tid * 1.0 / nthread);
         RandomKeyTrace::RangeIterator key_iterator;
         if (thread->tid / nthread == 0) {  // 0
             key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
@@ -1273,7 +1277,7 @@ public:
 
         thread->stats.Start ();
         Duration duration (FLAGS_readtime, reads_);
-        while (!duration.Done(batch) && key_iterator.Valid ()) {
+        while (!duration.Done (batch) && key_iterator.Valid ()) {
             uint64_t j = 0;
             for (; j < batch && key_iterator.Valid (); j++) {
                 size_t ikey = key_iterator.Next ();
@@ -1291,7 +1295,7 @@ public:
             // check every 10,000 ops
             bool timOrOps = thread->stats.FinishedBatchOp (j);
 
-                        // execute every second
+            // execute every second
             if (!timOrOps) {
                 if (thread->tid * 1.0 / nthread == 0) {  // 0
                     totalMinorCompaction0_.fetch_add (thread->privateStates.getLastIncrease (),
@@ -1326,7 +1330,7 @@ public:
                     totalMinorCompaction1 = MC1;
                     totalMinorCompaction2 = MC2;
 
-                    // TODO : ACTION 
+                    // TODO : ACTION
                     if (validBufferFlag) {
                         // need to use the time that per MC cost 1/gap0??????
                         double bufferRate0 =
@@ -1340,26 +1344,26 @@ public:
                             1.0 / D_RW (hashtable2_)->curSegnumNum.load (std::memory_order_relaxed);
 
                         if (gap0 * bufferRate0 > gap1 * bufferRate1) {  // increase 0 buffer
-                            D_RW (hashtable1_)->balance.fetch_add ((uint32_t) (gap1 * bufferRate1));
-                            D_RW (hashtable0_)->balance.fetch_sub ((uint32_t) (gap1 * bufferRate1));
+                            D_RW (hashtable1_)->balance.fetch_add ((uint32_t)(gap1 * bufferRate1));
+                            D_RW (hashtable0_)->balance.fetch_sub ((uint32_t)(gap1 * bufferRate1));
                         } else {
-                            D_RW (hashtable0_)->balance.fetch_add ((uint32_t) (gap0 * bufferRate0));
-                            D_RW (hashtable1_)->balance.fetch_sub ((uint32_t) (gap0 * bufferRate0));
-                        } 
-                        if (gap0 * bufferRate0 > gap2 * bufferRate2) { 
-                            D_RW (hashtable2_)->balance.fetch_add ((uint32_t) (gap2 * bufferRate2));
-                            D_RW (hashtable0_)->balance.fetch_sub ((uint32_t) (gap2 * bufferRate2));
+                            D_RW (hashtable0_)->balance.fetch_add ((uint32_t)(gap0 * bufferRate0));
+                            D_RW (hashtable1_)->balance.fetch_sub ((uint32_t)(gap0 * bufferRate0));
+                        }
+                        if (gap0 * bufferRate0 > gap2 * bufferRate2) {
+                            D_RW (hashtable2_)->balance.fetch_add ((uint32_t)(gap2 * bufferRate2));
+                            D_RW (hashtable0_)->balance.fetch_sub ((uint32_t)(gap2 * bufferRate2));
                         } else {
-                            D_RW (hashtable0_)->balance.fetch_add ((uint32_t) (gap0 * bufferRate0));
-                            D_RW (hashtable2_)->balance.fetch_sub ((uint32_t) (gap0 * bufferRate0));
-                        } 
+                            D_RW (hashtable0_)->balance.fetch_add ((uint32_t)(gap0 * bufferRate0));
+                            D_RW (hashtable2_)->balance.fetch_sub ((uint32_t)(gap0 * bufferRate0));
+                        }
 
                         if (gap1 * bufferRate1 > gap2 * bufferRate2) {
-                            D_RW (hashtable2_)->balance.fetch_add ((uint32_t) (gap2 * bufferRate2));
-                            D_RW (hashtable1_)->balance.fetch_sub ((uint32_t) (gap2 * bufferRate2));
+                            D_RW (hashtable2_)->balance.fetch_add ((uint32_t)(gap2 * bufferRate2));
+                            D_RW (hashtable1_)->balance.fetch_sub ((uint32_t)(gap2 * bufferRate2));
                         } else {
-                            D_RW (hashtable1_)->balance.fetch_add ((uint32_t) (gap1 * bufferRate1));
-                            D_RW (hashtable2_)->balance.fetch_sub ((uint32_t) (gap1 * bufferRate1));
+                            D_RW (hashtable1_)->balance.fetch_add ((uint32_t)(gap1 * bufferRate1));
+                            D_RW (hashtable2_)->balance.fetch_sub ((uint32_t)(gap1 * bufferRate1));
                         }
                     }
                 }
@@ -1592,7 +1596,7 @@ public:
         auto key_iterator =
             key_trace_->iterate_between (start_offset + 0.8 * interval, start_offset + interval);
         printf ("thread %2d, between %lu - %lu\n", thread->tid,
-                (size_t) (start_offset + 0.8 * interval), start_offset + interval);
+                (size_t)(start_offset + 0.8 * interval), start_offset + interval);
         thread->stats.Start ();
 
         while (key_iterator.Valid ()) {
@@ -1649,8 +1653,6 @@ public:
         thread->stats.AddMessage (buf);
         return;
     }
-
-    
 
 private:
     struct ThreadArg {

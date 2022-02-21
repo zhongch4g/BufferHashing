@@ -26,6 +26,7 @@ typedef const char *Value_t;
 const Key_t SENTINEL = -2;
 const Key_t INVALID = -1;
 const Value_t NONE = 0x0;
+namespace buflog_recovery {
 
 struct Pair {
     Key_t key;
@@ -51,7 +52,7 @@ constexpr size_t kNumPairPerCacheLine = 4;
 constexpr size_t kNumCacheLine = 8;
 constexpr size_t kCuckooThreshold = 16;
 
-using WriteBuffer = buflog::WriteBuffer<kWriteBufferSize>;
+using WriteBuffer = buflog::WriteBuffer;
 // constexpr size_t kCuckooThreshold = 32;
 
 struct Segment {
@@ -80,7 +81,7 @@ struct Segment {
         }
         local_depth = depth;
         sema = 0;
-        bufnode_ = new WriteBuffer (depth);
+        bufnode_ = new WriteBuffer (depth, 32 + (1 + 0.3));
         pmem::obj::transaction::run (pop, [&] () {
             logPtr = pmem::obj::make_persistent<buflog::LogPtr> ();
             logPtr->initLogPtr ();
@@ -131,6 +132,7 @@ struct Segment {
     int64_t sema = 0;
     size_t local_depth;
     WriteBuffer *bufnode_;
+    bool buf_flag;
     pmem::obj::persistent_ptr<buflog::LogPtr> logPtr;
 };
 
@@ -210,7 +212,7 @@ public:
     double Utilization (void);
     size_t Capacity (void);
     void Recovery (pmem::obj::pool<CCEH>, size_t, std::vector<uint64_t> &);
-    void BufferRecovery2 (pmem::obj::pool<CCEH>, uint64_t, int, std::vector<uint64_t>);
+    void BufferRecovery2 (pmem::obj::pool<CCEH>, uint64_t, int);
     void BufferRecovery1 (pmem::obj::pool<CCEH>, uint64_t);
 
     bool crashed = true;
@@ -219,5 +221,5 @@ public:
 private:
     TOID (struct Directory) dir;
 };
-
+};  // namespace buflog_recovery
 #endif

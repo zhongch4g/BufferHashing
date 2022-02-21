@@ -8,9 +8,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
+#include <unordered_set>
 #include <vector>
 
-#include <unordered_set>
 #include "../../src/buflog.h"
 #include "logger.h"
 #include "util.h"
@@ -23,6 +23,8 @@ typedef const char* Value_t;
 const Key_t SENTINEL = -2;
 const Key_t INVALID = -1;
 const Value_t NONE = 0x0;
+
+namespace buflog_dual {
 
 struct Pair {
     Key_t key;
@@ -48,7 +50,7 @@ constexpr size_t kNumPairPerCacheLine = 4;
 constexpr size_t kNumCacheLine = 8;
 constexpr size_t kCuckooThreshold = 16;
 
-using WriteBuffer = buflog::WriteBuffer<kWriteBufferSize>;
+using WriteBuffer = buflog::WriteBuffer;
 extern std::atomic<int32_t> validBuffer;
 extern std::atomic<int32_t> validBuffer_;
 extern bool validBufferFlag;
@@ -225,5 +227,5 @@ public:
 private:
     TOID (struct Directory) dir;
 };
-
+};  // namespace buflog_dual
 #endif

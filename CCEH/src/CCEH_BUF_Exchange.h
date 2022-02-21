@@ -23,7 +23,7 @@
 // #define BUFFER_SIZE_FACTOR 4
 // #define kBufNumMax 1
 // #define bufferRate 0.7
-
+namespace buflog_exchange {
 typedef size_t Key_t;
 typedef const char* Value_t;
 
@@ -64,7 +64,7 @@ constexpr size_t kCuckooThreshold = 16;
 // constexpr size_t kCuckooThreshold = 32;
 
 // The way to use the class with template
-using WriteBuffer = buflog::WriteBuffer<kWriteBufferSize>;
+using WriteBuffer = buflog::WriteBuffer;
 
 class BufferConfig {
 public:
@@ -249,4 +249,5 @@ public:
 private:
     TOID (struct Directory) dir;
 };
+};  // namespace buflog_exchange
 #endif

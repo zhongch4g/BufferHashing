@@ -24,6 +24,7 @@
 #define CONFIG_OUT_OF_PLACE_MERGE
 
 using namespace std;
+using namespace buflog_exchange;
 
 bool Segment::initSegment (CCEH* _cceh) {
     for (size_t i = 0; i < kNumSlot; ++i) {
@@ -55,7 +56,7 @@ bool Segment::initSegment (size_t depth, CCEH* _cceh) {
     if (tmp < requiredBufNum) {
         int32_t BN = _cceh->curBufferNum.fetch_add (1, std::memory_order_relaxed);
         if (BN < requiredBufNum) {
-            bufnode_ = new WriteBuffer (depth);
+            bufnode_ = new WriteBuffer (depth, 32 * (1 + 0.3));
             buf_flag = true;
             return true;
         } else {
