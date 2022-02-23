@@ -10,6 +10,8 @@ set(CCEH_SRCS
     "CCEH_BUF_dual.h"
     "CCEH_buflog_recovery.cpp"
     "CCEH_buflog_recovery.h"
+    "CCEH_buflog_wal.cpp"
+    "CCEH_buflog_wal.h"
     "trace.cc"
     "trace.h"
 )
