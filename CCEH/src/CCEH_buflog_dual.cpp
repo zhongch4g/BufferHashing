@@ -494,16 +494,25 @@ RETRY:
 
     // After segment split -> create new Writebuffer for split_segment_bufnode
     WriteBuffer* split_segment_bufnode = nullptr;
+    intermediate* split_segment_bufnode_med = (intermediate*)malloc (sizeof (struct intermediate));
+    split_segment_bufnode_med->bufnode = nullptr;
     WriteBuffer* segment_bufnode = nullptr;
+    intermediate* segment_bufnode_med = (intermediate*)malloc (sizeof (struct intermediate));
+    segment_bufnode_med->bufnode = nullptr;
     // update new_segment_bufnode local depth
     if (D_RW (dir)->intermediates[x]->bufnode != nullptr) {
         segment_bufnode = D_RW (dir)->intermediates[x]->bufnode;
         segment_bufnode->local_depth = D_RW (s[0])->local_depth;
+        segment_bufnode_med = D_RW (dir)->intermediates[x];
+        segment_bufnode_med->bufnode->local_depth = D_RW (s[0])->local_depth;
     }
     // printf("validBufferFlag = %d, validBuffer = %u\n", validBufferFlag, validBuffer.load());
     if (!validBufferFlag) {
         if (validBuffer.fetch_sub (1, std::memory_order_relaxed) > 0) {
             split_segment_bufnode = new WriteBuffer (D_RW (s[1])->local_depth, 32 * (1 + 0.3));
+            // split_segment_bufnode_med = (intermediate*)malloc (sizeof (struct intermediate));
+            split_segment_bufnode_med->bufnode =
+                new WriteBuffer (D_RW (s[1])->local_depth, 32 * (1 + 0.3));
             // printf("D_RW (s[1])->local_depth = %lu \n", D_RW (s[1])->local_depth);
             curBufferNum.fetch_add (1, std::memory_order_relaxed);
         } else {
@@ -548,14 +557,13 @@ DIR_RETRY:
             if (i == x) {
                 D_RW (D_RW (_dir)->segment)[2 * i] = s[0];
                 D_RW (D_RW (_dir)->segment)[2 * i + 1] = s[1];
-                D_RW (_dir)->intermediates[2 * i]->bufnode = segment_bufnode;
-                D_RW (_dir)->intermediates[2 * i + 1]->bufnode = split_segment_bufnode;
+                D_RW (_dir)->intermediates[2 * i] = segment_bufnode_med;
+                D_RW (_dir)->intermediates[2 * i + 1] = split_segment_bufnode_med;
             } else {
                 D_RW (D_RW (_dir)->segment)[2 * i] = D_RO (d)[i];
                 D_RW (D_RW (_dir)->segment)[2 * i + 1] = D_RO (d)[i];
-                D_RW (_dir)->intermediates[2 * i]->bufnode = D_RO (dir)->intermediates[i]->bufnode;
-                D_RW (_dir)->intermediates[2 * i + 1]->bufnode =
-                    D_RO (dir)->intermediates[i]->bufnode;
+                D_RW (_dir)->intermediates[2 * i] = D_RO (dir)->intermediates[i];
+                D_RW (_dir)->intermediates[2 * i + 1] = D_RO (dir)->intermediates[i];
             }
         }
 
@@ -613,13 +621,13 @@ DIR_RETRY:
 
                 if (D_RW (dir)->intermediates[x]->bufnode == nullptr)
                     bufferConfig.noBufferIndexSet->erase (x);
-                D_RW (dir)->intermediates[x]->bufnode = segment_bufnode;
+                D_RW (dir)->intermediates[x] = segment_bufnode_med;
                 if (D_RW (dir)->intermediates[x]->bufnode == nullptr)
                     bufferConfig.noBufferIndexSet->insert (x);
 
                 if (D_RW (dir)->intermediates[x + 1]->bufnode == nullptr)
                     bufferConfig.noBufferIndexSet->erase (x + 1);
-                D_RW (dir)->intermediates[x + 1]->bufnode = split_segment_bufnode;
+                D_RW (dir)->intermediates[x + 1] = split_segment_bufnode_med;
                 if (D_RW (dir)->intermediates[x + 1]->bufnode == nullptr)
                     bufferConfig.noBufferIndexSet->insert (x + 1);
 #endif
@@ -639,12 +647,12 @@ DIR_RETRY:
 
                 if (D_RW (dir)->intermediates[x]->bufnode == nullptr)
                     bufferConfig.noBufferIndexSet->erase (x);
-                D_RW (dir)->intermediates[x]->bufnode = split_segment_bufnode;
+                D_RW (dir)->intermediates[x] = split_segment_bufnode_med;
                 if (D_RW (dir)->intermediates[x]->bufnode == nullptr)
                     bufferConfig.noBufferIndexSet->insert (x);
                 if (D_RW (dir)->intermediates[x - 1]->bufnode == nullptr)
                     bufferConfig.noBufferIndexSet->erase (x - 1);
-                D_RW (dir)->intermediates[x - 1]->bufnode = segment_bufnode;
+                D_RW (dir)->intermediates[x - 1] = segment_bufnode_med;
                 if (D_RW (dir)->intermediates[x - 1]->bufnode == nullptr)
                     bufferConfig.noBufferIndexSet->insert (x - 1);
 #endif
@@ -663,7 +671,7 @@ DIR_RETRY:
             for (int i = 0; i < stride / 2; ++i) {
                 bufferConfig.noBufferIndexSet->erase (loc + stride / 2 + i);
                 D_RW (D_RW (dir)->segment)[loc + stride / 2 + i] = s[1];
-                D_RW (dir)->intermediates[loc + stride / 2 + i]->bufnode = split_segment_bufnode;
+                D_RW (dir)->intermediates[loc + stride / 2 + i] = split_segment_bufnode_med;
             }
 
             if (D_RW (dir)->intermediates[loc + stride / 2]->bufnode == nullptr) {
@@ -677,7 +685,7 @@ DIR_RETRY:
             for (int i = 0; i < stride / 2; ++i) {
                 bufferConfig.noBufferIndexSet->erase (loc + i);
                 D_RW (D_RW (dir)->segment)[loc + i] = s[0];
-                D_RW (dir)->intermediates[loc + i]->bufnode = segment_bufnode;
+                D_RW (dir)->intermediates[loc + i] = segment_bufnode_med;
             }
             if (D_RW (dir)->intermediates[loc]->bufnode == nullptr) {
                 bufferConfig.noBufferIndexSet->insert (loc);
@@ -749,19 +757,30 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool* pop, WriteBuffer* bufnode, S
 
         // create new Writebuffer for split_segment_bufnode
         WriteBuffer* split_segment_bufnode = nullptr;
+        intermediate* split_segment_bufnode_med =
+            (intermediate*)malloc (sizeof (struct intermediate));
+        split_segment_bufnode_med->bufnode = nullptr;
         // update new_segment_bufnode local depth
         auto x = (f_hash >> (8 * sizeof (f_hash) - D_RO (dir)->depth));
         WriteBuffer* new_segment_bufnode = nullptr;
+        intermediate* new_segment_bufnode_med =
+            (intermediate*)malloc (sizeof (struct intermediate));
+        new_segment_bufnode_med = nullptr;
 
         // After segment split
         // update new_segment_bufnode local depth
         if (D_RW (dir)->intermediates[x]->bufnode != nullptr) {
             new_segment_bufnode = D_RW (dir)->intermediates[x]->bufnode;
             new_segment_bufnode->local_depth = new_segment_dram->local_depth;
+            new_segment_bufnode_med = D_RW (dir)->intermediates[x];
+            new_segment_bufnode_med->bufnode->local_depth = new_segment_dram->local_depth;
         }
         if (!validBufferFlag) {
             if (validBuffer.fetch_sub (1, std::memory_order_relaxed) > 0) {
                 split_segment_bufnode =
+                    new WriteBuffer (split_segment_dram->local_depth, 32 * (1 + 0.3));
+
+                split_segment_bufnode_med->bufnode =
                     new WriteBuffer (split_segment_dram->local_depth, 32 * (1 + 0.3));
                 curBufferNum.fetch_add (1, std::memory_order_relaxed);
             } else {
@@ -804,15 +823,13 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool* pop, WriteBuffer* bufnode, S
                 if (i == x) {
                     D_RW (D_RW (_dir)->segment)[2 * i] = new_segment;
                     D_RW (D_RW (_dir)->segment)[2 * i + 1] = split_segment;
-                    D_RW (_dir)->intermediates[2 * i]->bufnode = new_segment_bufnode;
-                    D_RW (_dir)->intermediates[2 * i + 1]->bufnode = split_segment_bufnode;
+                    D_RW (_dir)->intermediates[2 * i] = new_segment_bufnode_med;
+                    D_RW (_dir)->intermediates[2 * i + 1] = split_segment_bufnode_med;
                 } else {
                     D_RW (D_RW (_dir)->segment)[2 * i] = D_RO (d)[i];
                     D_RW (D_RW (_dir)->segment)[2 * i + 1] = D_RO (d)[i];
-                    D_RW (_dir)->intermediates[2 * i]->bufnode =
-                        D_RO (dir)->intermediates[i]->bufnode;
-                    D_RW (_dir)->intermediates[2 * i + 1]->bufnode =
-                        D_RO (dir)->intermediates[i]->bufnode;
+                    D_RW (_dir)->intermediates[2 * i] = D_RO (dir)->intermediates[i];
+                    D_RW (_dir)->intermediates[2 * i + 1] = D_RO (dir)->intermediates[i];
                 }
             }
 
@@ -860,12 +877,12 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool* pop, WriteBuffer* bufnode, S
                                      sizeof (TOID (struct Segment)) * 2);
                     if (D_RW (dir)->intermediates[x]->bufnode == nullptr)
                         bufferConfig.noBufferIndexSet->erase (x);
-                    D_RW (dir)->intermediates[x]->bufnode = new_segment_bufnode;
+                    D_RW (dir)->intermediates[x] = new_segment_bufnode_med;
                     if (D_RW (dir)->intermediates[x]->bufnode == nullptr)
                         bufferConfig.noBufferIndexSet->insert (x);
                     if (D_RW (dir)->intermediates[x + 1]->bufnode == nullptr)
                         bufferConfig.noBufferIndexSet->erase (x + 1);
-                    D_RW (dir)->intermediates[x + 1]->bufnode = split_segment_bufnode;
+                    D_RW (dir)->intermediates[x + 1] = split_segment_bufnode_med;
                     if (D_RW (dir)->intermediates[x + 1]->bufnode == nullptr)
                         bufferConfig.noBufferIndexSet->insert (x + 1);
 
@@ -881,12 +898,12 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool* pop, WriteBuffer* bufnode, S
                                      sizeof (TOID (struct Segment)) * 2);
                     if (D_RW (dir)->intermediates[x]->bufnode == nullptr)
                         bufferConfig.noBufferIndexSet->erase (x);
-                    D_RW (dir)->intermediates[x]->bufnode = split_segment_bufnode;
+                    D_RW (dir)->intermediates[x] = split_segment_bufnode_med;
                     if (D_RW (dir)->intermediates[x]->bufnode == nullptr)
                         bufferConfig.noBufferIndexSet->insert (x);
                     if (D_RW (dir)->intermediates[x - 1]->bufnode == nullptr)
                         bufferConfig.noBufferIndexSet->erase (x);
-                    D_RW (dir)->intermediates[x - 1]->bufnode = new_segment_bufnode;
+                    D_RW (dir)->intermediates[x - 1] = new_segment_bufnode_med;
                     if (D_RW (dir)->intermediates[x - 1]->bufnode == nullptr)
                         bufferConfig.noBufferIndexSet->insert (x - 1);
                 }
@@ -898,8 +915,7 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool* pop, WriteBuffer* bufnode, S
                 for (int i = 0; i < stride / 2; ++i) {
                     bufferConfig.noBufferIndexSet->erase (loc + stride / 2 + i);
                     D_RW (D_RW (dir)->segment)[loc + stride / 2 + i] = split_segment;
-                    D_RW (dir)->intermediates[loc + stride / 2 + i]->bufnode =
-                        split_segment_bufnode;
+                    D_RW (dir)->intermediates[loc + stride / 2 + i] = split_segment_bufnode_med;
                 }
                 if (D_RW (dir)->intermediates[loc + stride / 2]->bufnode == nullptr) {
                     bufferConfig.noBufferIndexSet->insert (loc + stride / 2);
@@ -932,6 +948,7 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool* pop, WriteBuffer* bufnode, S
                 WriteBuffer* tempstore = D_RW (dir)->intermediates[x]->bufnode;
                 delete tempstore;
                 tempstore = nullptr;
+                D_RW (dir)->intermediates[x]->bufnode = nullptr;
 
                 validBuffer.fetch_add (1, std::memory_order_relaxed);
                 curBufferNum.fetch_sub (1, std::memory_order_relaxed);
