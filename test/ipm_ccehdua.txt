@@ -1,0 +1,1 @@
+No functional DIMMs in the system.

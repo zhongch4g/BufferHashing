@@ -374,7 +374,7 @@ public:
         }
 
         const size_t initialSize = 1024 * FLAGS_initsize;  // 16 million initial
-        printf("initialsize = %lu\n", initialSize);
+        printf ("initialsize = %lu\n", initialSize);
         hashtable_ = POBJ_ROOT (pop_, CCEH);
         D_RW (hashtable_)->initCCEH (pop_, initialSize);
     }
@@ -388,7 +388,7 @@ public:
         if (reads_ == 0) {
             reads_ = key_trace_->count_;
             // FLAGS_read = key_trace_->count_;
-            printf("reads_ = %lu \n", reads_);
+            printf ("reads_ = %lu \n", reads_);
         }
         PrintHeader ();
         bool fresh_db = true;
@@ -485,7 +485,7 @@ public:
         size_t interval = num_ / FLAGS_thread;
         size_t start_offset = thread->tid * interval;
         auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
-        
+
         size_t not_find = 0;
         uint64_t data_offset;
         Duration duration (FLAGS_readtime, reads_);
@@ -551,7 +551,7 @@ public:
         size_t interval = num_ / FLAGS_thread;
         size_t start_offset = thread->tid * interval;
         auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
-        
+
         size_t not_find = 0;
         uint64_t data_offset;
         Duration duration (FLAGS_readtime, reads_);
@@ -676,6 +676,7 @@ public:
             }
             thread->stats.FinishedBatchOp (j);
         }
+        D_RW (hashtable_)->Capacity ();
     write_end:
         return;
     }

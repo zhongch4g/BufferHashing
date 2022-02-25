@@ -1,1 +1,1 @@
-No functional PMem modules in the system.
+No functional DIMMs in the system.

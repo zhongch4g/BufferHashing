@@ -839,6 +839,7 @@ public:
         }
 
         thread->stats.real_finish_ = NowMicros ();
+        D_RW (hashtable_)->Capacity ();
         return;
     }
 

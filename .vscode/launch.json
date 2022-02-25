@@ -5,13 +5,12 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "(gdb) Launch",
+            "name": "C/C++: clang++ Build and debug active file",
             "type": "cppdbg",
             "request": "launch",
-            // "program": "${workspaceFolder}/CCEH-BUFLOG/debug/ccehex_bench",
-            "program": "${workspaceFolder}/debug/cceh_bench",
+            "program": "${workspaceFolder}/debug/cceh_dual_bench",
             "args": [
-                "--thread=1", "--benchmarks=load", "--num=120000000"
+                "--thread=1", "--benchmarks=load", "--num=60000000", "--report_interval=0.5", "--batch=1000000", "--ins_num=1", "--bufferNum=70000", "--bufferNum0=70000", "--bufferNum1=70000", "--gChoice=0"
             ],
             "stopAtEntry": false,
             "cwd": "${fileDirname}",

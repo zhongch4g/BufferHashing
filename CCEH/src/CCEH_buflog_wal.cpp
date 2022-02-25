@@ -285,7 +285,8 @@ retry:
         next_ = bufferLogNodes[tid].Append (buflog_recovery::kDataLogNodeValid, key,
                                             (uint64_t)value, data, false);
     }
-    // D_RW (target)->logPtr->setData (tid, next_);
+    D_RW (target)->logPtr.setData (tid, next_);
+    pmemobj_persist (pop, (char *)&D_RO (target)->logPtr, sizeof (buflog_recovery::LogPtr));
     // pop.root ()->BufferLogNodes.persist ();
     // D_RW (target)->logPtr.persist ();
 

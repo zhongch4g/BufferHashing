@@ -1,11 +1,14 @@
 #include "src/CCEH.h"
+
 #include <stdio.h>
+
 #include <bitset>
 #include <cassert>
 #include <iostream>
 #include <thread>
 #include <unordered_map>
 #include <vector>
+
 #include "src/hash.h"
 #include "src/util.h"
 
@@ -535,7 +538,7 @@ size_t CCEH::Capacity (void) {
         int stride = pow (2, D_RO (dir)->depth - D_RO (target)->local_depth);
         i += stride;
     }
-
+    printf ("Current # of Segments %lu \n", cnt);
     return cnt * Segment::kNumSlot;
 }
 

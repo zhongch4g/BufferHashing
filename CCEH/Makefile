@@ -3,7 +3,7 @@
 CXX := g++-10 -O3 -std=c++17 -g
 CFLAGS := -I./ -lrt
 
-all: test ycsb
+all: ycsb
 
 ycsb: src/ycsb_bench.cpp CCEH TRACE
 	$(CXX) $(CFLAGS) -o ycsb_bench src/ycsb_bench.cpp src/CCEH_CoW.o src/trace.o -lpmemobj -ltbb -lpmem -lpthread -lgflags -DMULTITHREAD

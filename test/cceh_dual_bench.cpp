@@ -18,7 +18,7 @@
 #include <thread>  // std::thread
 #include <vector>
 
-#include "CCEH_BUF_dual.h"
+#include "CCEH_buflog_dual.h"
 #include "cceh_util.h"
 #include "histogram.h"
 
@@ -28,7 +28,7 @@
 using GFLAGS_NAMESPACE::ParseCommandLineFlags;
 using GFLAGS_NAMESPACE::RegisterFlagValidator;
 using GFLAGS_NAMESPACE::SetUsageMessage;
-using namespace buflog_dual;
+using namespace cceh_buflog_dual;
 
 DEFINE_int32 (initsize, 16, "initial capacity in million");
 DEFINE_string (filepath, "/mnt/pmem/objpool.data", "");
@@ -47,8 +47,8 @@ DEFINE_string (benchmarks, "load,readall", "");
 DEFINE_int32 (writeThreads, 1,
               "For readwhilewriting, determine how many write threads out of 16 threads.");
 DEFINE_int32 (bufferNum, 1000000, "How many buffer provides?");
-DEFINE_int32 (bufferNum0, 30000, "How many buffer provides?");
-DEFINE_int32 (bufferNum1, 30000, "How many buffer provides?");
+DEFINE_int32 (bufferNum0, 70000, "How many buffer provides?");
+DEFINE_int32 (bufferNum1, 70000, "How many buffer provides?");
 DEFINE_int32 (bufferNum2, 30000, "How many buffer provides?");
 DEFINE_int32 (granularity, 1, "how many buffers transfer?");
 DEFINE_int32 (gChoice, 0, "Write Percentage");
@@ -981,10 +981,10 @@ public:
                         // need to use the time that per MC cost 1/gap0??????
                         double bufferRate0 =
                             D_RW (hashtable0_)->curBufferNum.load (std::memory_order_relaxed) *
-                            1.0 / D_RW (hashtable0_)->curSegnumNum.load (std::memory_order_relaxed);
+                            1.0 / D_RW (hashtable0_)->curSegmentNum.load (std::memory_order_relaxed);
                         double bufferRate1 =
                             D_RW (hashtable1_)->curBufferNum.load (std::memory_order_relaxed) *
-                            1.0 / D_RW (hashtable1_)->curSegnumNum.load (std::memory_order_relaxed);
+                            1.0 / D_RW (hashtable1_)->curSegmentNum.load (std::memory_order_relaxed);
 
                         if (gap0 * bufferRate0 >
                             (gap1 * bufferRate1 * 1.05)) {  // increase 0 buffer
@@ -1043,14 +1043,14 @@ public:
             //     printf ("%u,%u,%u\n", h0, h1, h0 + h1);
             // }
 
-            if (thread->tid == 8) {
-                printf ("[Number of Segments]%u,%u \n",
-                        D_RW (hashtable0_)->curSegnumNum.load (std::memory_order_relaxed),
-                        D_RW (hashtable1_)->curSegnumNum.load (std::memory_order_relaxed));
-                printf ("[Number of Buffers]%u,%u \n",
-                        D_RW (hashtable0_)->curBufferNum.load (std::memory_order_relaxed),
-                        D_RW (hashtable1_)->curBufferNum.load (std::memory_order_relaxed));
-            }
+            // if (thread->tid == 8) {
+            //     printf ("[Number of Segments]%u,%u \n",
+            //             D_RW (hashtable0_)->curSegmentNum.load (std::memory_order_relaxed),
+            //             D_RW (hashtable1_)->curSegmentNum.load (std::memory_order_relaxed));
+            //     printf ("[Number of Buffers]%u,%u \n",
+            //             D_RW (hashtable0_)->curBufferNum.load (std::memory_order_relaxed),
+            //             D_RW (hashtable1_)->curBufferNum.load (std::memory_order_relaxed));
+            // }
         }
         thread->stats.real_finish_ = NowMicros ();
         if (thread->tid >= nthread) {
@@ -1070,8 +1070,8 @@ public:
         }
 
         printf ("[Number of Segments]%u,%u \n",
-                D_RW (hashtable0_)->curSegnumNum.load (std::memory_order_relaxed),
-                D_RW (hashtable1_)->curSegnumNum.load (std::memory_order_relaxed));
+                D_RW (hashtable0_)->curSegmentNum.load (std::memory_order_relaxed),
+                D_RW (hashtable1_)->curSegmentNum.load (std::memory_order_relaxed));
         return;
     }
 
@@ -1219,8 +1219,8 @@ public:
 
             if (thread->tid == 8) {
                 printf ("[Number of Segments]%u,%u \n",
-                        D_RW (hashtable0_)->curSegnumNum.load (std::memory_order_relaxed),
-                        D_RW (hashtable1_)->curSegnumNum.load (std::memory_order_relaxed));
+                        D_RW (hashtable0_)->curSegmentNum.load (std::memory_order_relaxed),
+                        D_RW (hashtable1_)->curSegmentNum.load (std::memory_order_relaxed));
                 printf ("[Number of Buffers]%u,%u \n",
                         D_RW (hashtable0_)->curBufferNum.load (std::memory_order_relaxed),
                         D_RW (hashtable1_)->curBufferNum.load (std::memory_order_relaxed));
@@ -1244,8 +1244,8 @@ public:
         // }
 
         printf ("[Number of Segments]%u,%u \n",
-                D_RW (hashtable0_)->curSegnumNum.load (std::memory_order_relaxed),
-                D_RW (hashtable1_)->curSegnumNum.load (std::memory_order_relaxed));
+                D_RW (hashtable0_)->curSegmentNum.load (std::memory_order_relaxed),
+                D_RW (hashtable1_)->curSegmentNum.load (std::memory_order_relaxed));
         return;
     }
 
@@ -1335,13 +1335,13 @@ public:
                         // need to use the time that per MC cost 1/gap0??????
                         double bufferRate0 =
                             D_RW (hashtable0_)->curBufferNum.load (std::memory_order_relaxed) *
-                            1.0 / D_RW (hashtable0_)->curSegnumNum.load (std::memory_order_relaxed);
+                            1.0 / D_RW (hashtable0_)->curSegmentNum.load (std::memory_order_relaxed);
                         double bufferRate1 =
                             D_RW (hashtable1_)->curBufferNum.load (std::memory_order_relaxed) *
-                            1.0 / D_RW (hashtable1_)->curSegnumNum.load (std::memory_order_relaxed);
+                            1.0 / D_RW (hashtable1_)->curSegmentNum.load (std::memory_order_relaxed);
                         double bufferRate2 =
                             D_RW (hashtable2_)->curBufferNum.load (std::memory_order_relaxed) *
-                            1.0 / D_RW (hashtable2_)->curSegnumNum.load (std::memory_order_relaxed);
+                            1.0 / D_RW (hashtable2_)->curSegmentNum.load (std::memory_order_relaxed);
 
                         if (gap0 * bufferRate0 > gap1 * bufferRate1) {  // increase 0 buffer
                             D_RW (hashtable1_)->balance.fetch_add ((uint32_t)(gap1 * bufferRate1));

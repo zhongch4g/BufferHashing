@@ -16,15 +16,13 @@
 #include "util.h"
 
 #define TOID_ARRAY(x) TOID (x)
-
+namespace buflog_dual {
 typedef size_t Key_t;
 typedef const char* Value_t;
 
 const Key_t SENTINEL = -2;
 const Key_t INVALID = -1;
 const Value_t NONE = 0x0;
-
-namespace buflog_dual {
 
 struct Pair {
     Key_t key;

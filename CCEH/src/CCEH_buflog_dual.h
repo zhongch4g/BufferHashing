@@ -1,5 +1,5 @@
-#ifndef CCEH_DUAL_H_
-#define CCEH_DUAL_H_
+#ifndef CCEH_BUFLOG_DUAL_H_
+#define CCEH_BUFLOG_DUAL_H_
 
 #include <libpmemobj.h>
 #include <pthread.h>
@@ -16,7 +16,11 @@
 #include "util.h"
 
 #define TOID_ARRAY(x) TOID (x)
+
+
 namespace cceh_buflog_dual {
+
+
 typedef size_t Key_t;
 typedef const char* Value_t;
 
@@ -48,10 +52,10 @@ constexpr size_t kNumPairPerCacheLine = 4;
 constexpr size_t kNumCacheLine = 8;
 constexpr size_t kCuckooThreshold = 16;
 
-using WriteBuffer = buflog::WriteBuffer;
 extern std::atomic<int32_t> validBuffer;
 extern std::atomic<int32_t> validBuffer_;
 extern bool validBufferFlag;
+using WriteBuffer = buflog::WriteBuffer;
 
 class BufferConfig {
 public:
@@ -232,7 +236,7 @@ public:
     bool increaseBuffer (void);
     void releaseAllBuffers (void);
 
-    BufferConfig* bufferConfig;          // to record the basic buffer configuration
+    BufferConfig bufferConfig;           // to record the basic buffer configuration
     std::atomic<uint32_t> curBufferNum;  // to record current # of buffer
     std::atomic<uint32_t> curSegmentNum;
     std::atomic<int32_t> balance;

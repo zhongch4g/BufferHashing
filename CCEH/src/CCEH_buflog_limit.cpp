@@ -261,7 +261,7 @@ void CCEH::initCCEH (PMEMobjpool *pop, size_t initCap, uint64_t bufferNum) {
         D_RW (D_RW (D_RW (dir)->segment)[i])->initSegment (static_cast<size_t> (log2 (initCap)));
         if (curBufferNum.load () < bufferConfig->getKBufNumMax ()) {
             D_RW (dir)->bufnodes[i] =
-                new WriteBuffer (static_cast<size_t> (log2 (initCap)), 32 + (1 + 0.3));
+                new WriteBuffer (static_cast<size_t> (log2 (initCap)), 32 * (1 + 0.3));
             // add the number of segments and buffers
             curBufferNum.fetch_add (1, std::memory_order_relaxed);
         }
@@ -439,7 +439,7 @@ RETRY:
 
     // 1. check if there has enough buffer
     if (curBufferNum.load () < bufferConfig->getKBufNumMax ()) {
-        split_segment_bufnode = new WriteBuffer (D_RW (s[1])->local_depth, 32 + (1 + 0.3));
+        split_segment_bufnode = new WriteBuffer (D_RW (s[1])->local_depth, 32 * (1 + 0.3));
         curBufferNum.fetch_add (1, std::memory_order_relaxed);
         // INFO ("Current number of buffers = %lu\n", curBufferNum.load ());
     }
@@ -635,7 +635,7 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool *pop, WriteBuffer *bufnode, S
         // 1. check if there has enough buffer
         if (curBufferNum.load () < bufferConfig->getKBufNumMax ()) {
             split_segment_bufnode =
-                new WriteBuffer (split_segment_dram->local_depth, 32 + (1 + 0.3));
+                new WriteBuffer (split_segment_dram->local_depth, 32 * (1 + 0.3));
             curBufferNum.fetch_add (1, std::memory_order_relaxed);
             // INFO ("Current number of buffers = %lu\n", curBufferNum.load ());
         }
@@ -953,7 +953,7 @@ size_t CCEH::Capacity (void) {
         int stride = pow (2, D_RO (dir)->depth - D_RO (target)->local_depth);
         i += stride;
     }
-
+    printf ("Current # of Segments %lu \n", cnt);
     return cnt * Segment::kNumSlot;
 }
 
