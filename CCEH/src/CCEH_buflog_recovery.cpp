@@ -293,20 +293,19 @@ retry:
     bool res = target_ptr->bufnode_->PutWithLog (key, (char *)value);
 
     if (res) {
-        // pmem::obj::transaction::run (pop, [&] () {
-        //     auto data = target_ptr->logPtr->getData ();
-        //     auto next_ = 0;
-        //     // data == 256 means it is the first time to use this buffer
-        //     if (data == 256) {
-        //         next_ = pop.root ()->BufferLogNodes[tid].Append (buflog::kDataLogNodeCheckpoint,
-        //                                                          key, (uint64_t)value, data,
-        //                                                          true);
-        //     } else {
-        //         next_ = pop.root ()->BufferLogNodes[tid].Append (buflog::kDataLogNodeValid, key,
-        //                                                          (uint64_t)value, data, true);
-        //     }
-        //     target_ptr->logPtr->setData (tid, next_);
-        // });
+        pmem::obj::transaction::run (pop, [&] () {
+            auto data = target_ptr->logPtr->getData ();
+            auto next_ = 0;
+            // data == 256 means it is the first time to use this buffer
+            if (data == 256) {
+                next_ = pop.root ()->BufferLogNodes[tid].Append (buflog::kDataLogNodeCheckpoint,
+                                                                 key, (uint64_t)value, data, true);
+            } else {
+                next_ = pop.root ()->BufferLogNodes[tid].Append (buflog::kDataLogNodeValid, key,
+                                                                 (uint64_t)value, data, true);
+            }
+            target_ptr->logPtr->setData (tid, next_);
+        });
 
         // auto data = target_ptr->logPtr->getData ();
         // auto next_ = 0;
@@ -1044,7 +1043,7 @@ void CCEH::BufferRecovery2 (pmem::obj::pool<CCEH> pop, uint64_t nthread, int tid
         auto target = D_RO (D_RO (dir)->segment)[x];
         auto target_ptr = D_RW (target);
         if (!target_ptr->buf_flag) {
-            target_ptr->bufnode_ = new WriteBuffer (target_ptr->local_depth, 32 + (1 + 0.3));
+            target_ptr->bufnode_ = new WriteBuffer (target_ptr->local_depth, 32 * (1 + 0.3));
             target_ptr->buf_flag = true;
         }
         target_ptr->bufnode_->PutWithLog (key, (char *)val);

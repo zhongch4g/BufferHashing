@@ -1,0 +1,144 @@
+CCEH-BUFLOG-RECOVERY 
+Randomize the trace...[32mStart IPMWatcher for bufferrecovery
+[0mFinished Recovery in 0.0254980000 secs (total = 62500) 
+Finished Recovery in 0.0255470000 secs (total = 62500) 
+Finished Recovery in 0.0255440000 secs (total = 62500) 
+Finished Recovery in 0.0255670000 secs (total = 62500) 
+Finished Recovery in 0.0256690000 secs (total = 62500) 
+Finished Recovery in 0.0256320000 secs (total = 62500) 
+Finished Recovery in 0.0256460000 secs (total = 62500) 
+Finished Recovery in 0.0256900000 secs (total = 62500) 
+Finished Recovery in 0.0257340000 secs (total = 62500) 
+Finished Recovery in 0.0257610000 secs (total = 62500) 
+Finished Recovery in 0.0257730000 secs (total = 62500) 
+Finished Recovery in 0.0258160000 secs (total = 62500) 
+Finished Recovery in 0.0257950000 secs (total = 62500) 
+Finished Recovery in 0.0258880000 secs (total = 62500) 
+Finished Recovery in 0.0259320000 secs (total = 62500) 
+Finished Recovery in 0.0259950000 secs (total = 62500) 
+1 operations, 0.03 real_elapsed 
+dimm_num = 6 
+DIMM0 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |          6.96 |           0.34 |       14.62 |         1.62 |   2.10 |   4.77 |
+DIMM1 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |          6.92 |           0.34 |       14.49 |         1.62 |   2.09 |   4.74 |
+DIMM2 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |          6.91 |           0.34 |       14.43 |         1.61 |   2.09 |   4.70 |
+DIMM3 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |          4.41 |           0.01 |        4.60 |         0.29 |   1.04 |  19.59 |
+DIMM4 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |          4.42 |           0.01 |        4.61 |         0.29 |   1.04 |  19.65 |
+DIMM5 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |          4.41 |           0.01 |        4.58 |         0.29 |   1.04 |  19.54 |
+*SUM* | DIMM-R:    79.5 MB/s. User-R:    47.2 MB/s   | DIMM-W:     7.9 MB/s, User-W:     1.5 MB/s. Time:   0.72s
+*SUMSUM* | DIMM-R:    57.3 MB| User-R:    34.0 MB   | DIMM-W:     5.7 MB | User-W:     1.1 MB | Time:   0.72s
+[32mDestroy IPMWatcher.
+[0m
+CCEH-BUFLOG-RECOVERY 
+Randomize the trace...[32mStart IPMWatcher for bufferrecovery
+[0mFinished Recovery in 0.0692080000 secs (total = 312500) 
+Finished Recovery in 0.0693490000 secs (total = 312500) 
+Finished Recovery in 0.0700960000 secs (total = 312500) 
+Finished Recovery in 0.0702110000 secs (total = 312500) 
+Finished Recovery in 0.0702990000 secs (total = 312500) 
+Finished Recovery in 0.0704060000 secs (total = 312500) 
+Finished Recovery in 0.0706010000 secs (total = 312500) 
+Finished Recovery in 0.0707000000 secs (total = 312500) 
+Finished Recovery in 0.0709140000 secs (total = 312500) 
+Finished Recovery in 0.0709500000 secs (total = 312500) 
+Finished Recovery in 0.0709870000 secs (total = 312500) 
+Finished Recovery in 0.0710920000 secs (total = 312500) 
+Finished Recovery in 0.0711900000 secs (total = 312500) 
+Finished Recovery in 0.0712000000 secs (total = 312500) 
+Finished Recovery in 0.0712900000 secs (total = 312500) 
+Finished Recovery in 0.0716470000 secs (total = 312500) 
+1 operations, 0.07 real_elapsed 
+dimm_num = 6 
+DIMM0 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |         30.39 |           0.35 |       56.77 |         1.67 |   1.87 |   4.82 |
+DIMM1 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |         30.44 |           0.35 |       56.95 |         1.66 |   1.87 |   4.81 |
+DIMM2 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |         30.52 |           0.35 |       57.32 |         1.66 |   1.88 |   4.81 |
+DIMM3 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |         21.57 |           0.01 |       21.81 |         0.33 |   1.01 |  22.09 |
+DIMM4 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |         21.58 |           0.01 |       21.83 |         0.33 |   1.01 |  22.08 |
+DIMM5 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |         21.59 |           0.01 |       21.83 |         0.33 |   1.01 |  22.03 |
+*SUM* | DIMM-R:   309.2 MB/s. User-R:   204.0 MB/s   | DIMM-W:     7.8 MB/s, User-W:     1.4 MB/s. Time:   0.77s
+*SUMSUM* | DIMM-R:   236.5 MB| User-R:   156.1 MB   | DIMM-W:     6.0 MB | User-W:     1.1 MB | Time:   0.77s
+[32mDestroy IPMWatcher.
+[0m
+CCEH-BUFLOG-RECOVERY 
+Randomize the trace...[32mStart IPMWatcher for bufferrecovery
+[0mFinished Recovery in 0.2341280000 secs (total = 625000) 
+Finished Recovery in 0.2410970000 secs (total = 625000) 
+Finished Recovery in 0.2439810000 secs (total = 625000) 
+Finished Recovery in 0.2445250000 secs (total = 625000) 
+Finished Recovery in 0.2477180000 secs (total = 625000) 
+Finished Recovery in 0.2479560000 secs (total = 625000) 
+Finished Recovery in 0.2485740000 secs (total = 625000) 
+Finished Recovery in 0.2486670000 secs (total = 625000) 
+Finished Recovery in 0.2511620000 secs (total = 625000) 
+Finished Recovery in 0.2519490000 secs (total = 625000) 
+Finished Recovery in 0.2528130000 secs (total = 625000) 
+Finished Recovery in 0.2549920000 secs (total = 625000) 
+Finished Recovery in 0.2561300000 secs (total = 625000) 
+Finished Recovery in 0.2574110000 secs (total = 625000) 
+Finished Recovery in 0.2604630000 secs (total = 625000) 
+Finished Recovery in 0.2656930000 secs (total = 625000) 
+1 operations, 0.27 real_elapsed 
+dimm_num = 6 
+DIMM0 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |         70.96 |           0.35 |      154.05 |         1.86 |   2.17 |   5.37 |
+DIMM1 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |         70.86 |           0.35 |      153.62 |         1.85 |   2.17 |   5.33 |
+DIMM2 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |         70.95 |           0.35 |      154.03 |         1.83 |   2.17 |   5.28 |
+DIMM3 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |         43.05 |           0.01 |       43.38 |         0.48 |   1.01 |  32.38 |
+DIMM4 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |         43.04 |           0.01 |       43.36 |         0.48 |   1.01 |  32.35 |
+DIMM5 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |         43.06 |           0.01 |       43.39 |         0.48 |   1.01 |  32.36 |
+*SUM* | DIMM-R:   617.1 MB/s. User-R:   356.5 MB/s   | DIMM-W:     7.3 MB/s, User-W:     1.1 MB/s. Time:   0.96s
+*SUMSUM* | DIMM-R:   591.8 MB| User-R:   341.9 MB   | DIMM-W:     7.0 MB | User-W:     1.1 MB | Time:   0.96s
+[32mDestroy IPMWatcher.
+[0m
+CCEH-BUFLOG-RECOVERY 
+Randomize the trace...[32mStart IPMWatcher for bufferrecovery
+[0mFinished Recovery in 2.5988060000 secs (total = 3125000) 
+Finished Recovery in 2.5997590000 secs (total = 3125000) 
+Finished Recovery in 2.6099760000 secs (total = 3125000) 
+Finished Recovery in 2.6174450000 secs (total = 3125000) 
+Finished Recovery in 2.6194030000 secs (total = 3125000) 
+Finished Recovery in 2.6256480000 secs (total = 3125000) 
+Finished Recovery in 2.6256910000 secs (total = 3125000) 
+Finished Recovery in 2.6344380000 secs (total = 3125000) 
+Finished Recovery in 2.6353700000 secs (total = 3125000) 
+Finished Recovery in 2.6362680000 secs (total = 3125000) 
+Finished Recovery in 2.6463160000 secs (total = 3125000) 
+Finished Recovery in 2.6483810000 secs (total = 3125000) 
+Finished Recovery in 2.6515300000 secs (total = 3125000) 
+Finished Recovery in 2.6516030000 secs (total = 3125000) 
+Finished Recovery in 2.6865900000 secs (total = 3125000) 
+Finished Recovery in 2.7051120000 secs (total = 3125000) 
+1 operations, 2.71 real_elapsed 
+dimm_num = 6 
+DIMM0 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |       1020.73 |           1.55 |     3435.01 |         9.41 |   3.37 |   6.08 |
+DIMM1 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |       1020.66 |           1.55 |     3434.58 |         9.41 |   3.37 |   6.07 |
+DIMM2 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |       1025.02 |           1.56 |     3451.76 |         9.46 |   3.37 |   6.07 |
+DIMM3 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |        244.40 |           0.01 |      331.96 |         2.40 |   1.36 | 161.68 |
+DIMM4 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |        246.26 |           0.01 |      339.29 |         2.40 |   1.38 | 162.36 |
+DIMM5 | Read from IMC | Write from IMC |  Read DIMM  |  Write DIMM  |   RA   |   WA   |
+  MB  |        244.90 |           0.01 |      333.94 |         2.39 |   1.36 | 161.54 |
+*SUM* | DIMM-R:  3342.1 MB/s. User-R:  1121.9 MB/s   | DIMM-W:    10.5 MB/s, User-W:     1.4 MB/s. Time:   3.39s
+*SUMSUM* | DIMM-R: 11326.5 MB| User-R:  3802.0 MB   | DIMM-W:    35.5 MB | User-W:     4.7 MB | Time:   3.39s
+[32mDestroy IPMWatcher.
+[0m

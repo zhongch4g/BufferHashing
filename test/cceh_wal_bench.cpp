@@ -401,13 +401,15 @@ public:
     PMEMobjpool* pop_;
     TOID (CCEH) hashtable_;
     uint32_t ins_num_;
+    std::atomic<uint32_t> thread_count;
     Benchmark ()
         : num_ (FLAGS_num),
           value_size_ (FLAGS_value_size),
           reads_ (FLAGS_read),
           writes_ (FLAGS_write),
           key_trace_ (nullptr),
-          hashtable_ (OID_NULL) {
+          hashtable_ (OID_NULL),
+          thread_count (0) {
         remove (FLAGS_filepath.c_str ());  // delete the mapped file.
         pop_ = pmemobj_create (FLAGS_filepath.c_str (), "CCEH", POOL_SIZE, 0666);
         if (!pop_) {
@@ -757,6 +759,10 @@ public:
         }
 
         thread->stats.real_finish_ = NowMicros ();
+        thread_count.fetch_add (1, std::memory_order_relaxed);
+        if (thread_count.load () == FLAGS_thread - 1) {
+            D_RW (hashtable_)->Recovery (pop_);
+        }
 
         return;
     }

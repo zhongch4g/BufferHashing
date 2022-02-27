@@ -1001,7 +1001,8 @@ public:
     std::vector<SortedBufNode> nodes_;
     AtomicSpinLock lock_;
     size_t local_depth;
-    std::vector<uint64_t> backTraker_;
+    bool isRecovered;
+    bool isRecovering;
 
     WriteBuffer () { local_depth = 0; }
 

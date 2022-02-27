@@ -15,7 +15,7 @@
 #define TOID_ARRAY(x) TOID (x)
 
 namespace cceh_buflog_wal {
-
+extern std::atomic<uint64_t> counter;
 typedef size_t Key_t;
 typedef const char *Value_t;
 
@@ -200,6 +200,7 @@ public:
     double Utilization (void);
     size_t Capacity (void);
     void Recovery (PMEMobjpool *);
+    void SetBufferToBeRecovered (PMEMobjpool *);
 
     bool crashed = true;
     std::atomic<size_t> curSegmentNum;
