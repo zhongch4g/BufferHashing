@@ -114,6 +114,7 @@ struct Segment {
     Pair bucket[kNumSlot];
     int64_t sema = 0;
     size_t local_depth;
+    buflog::LogPtr logPtr;
 };
 
 struct Directory {
@@ -179,9 +180,11 @@ public:
     CCEH (void) {}
     ~CCEH (void) {}
     void initCCEH (PMEMobjpool *);
-    void initCCEH (PMEMobjpool *, size_t);
+    void initCCEH (PMEMobjpool *, size_t);                     // without log version
+    void initCCEH (PMEMobjpool *, size_t, size_t, PMEMoid *);  // for log version
 
     void Insert (PMEMobjpool *, Key_t &, Value_t);
+    void InsertWithLog (PMEMobjpool *, Key_t &, Value_t, int);
     void insert (PMEMobjpool *, Key_t &, Value_t, bool with_lock);
     void mergeBufAndSplitWhenNeeded (PMEMobjpool *, WriteBuffer *bufnode, Segment_toid &target,
                                      size_t x);
@@ -193,11 +196,12 @@ public:
 
     double Utilization (void);
     size_t Capacity (void);
-    void Recovery (PMEMobjpool *);
-
+    void Recovery (PMEMobjpool *, int);
+    void BufferRecovery (PMEMobjpool *, uint64_t, int, PMEMoid *);
     bool crashed = true;
     std::atomic<size_t> curSegmentNum;
     std::atomic<size_t> curMCNum;
+    buflog::linkedredolog::BufferLogNode *bufferLogNodes;
 
 private:
     TOID (struct Directory) dir;

@@ -259,6 +259,36 @@ void CCEH::initCCEH (PMEMobjpool *pop, size_t initCap) {
     }
 }
 
+/*
+    For the Buffer Hashing with Log
+*/
+void CCEH::initCCEH (PMEMobjpool *pop, size_t initCap, size_t nthreads, PMEMoid *logAddrs) {
+    crashed = true;
+    POBJ_ALLOC (pop, &dir, struct Directory, sizeof (struct Directory), NULL, NULL);
+    D_RW (dir)->initDirectory (static_cast<size_t> (log2 (initCap)));
+    POBJ_ALLOC (pop, &D_RW (dir)->segment, TOID (struct Segment),
+                sizeof (TOID (struct Segment)) * D_RO (dir)->capacity, NULL, NULL);
+
+    // Create and initial the in-DRAM buffer
+    D_RW (dir)->bufnodes =
+        reinterpret_cast<WriteBuffer **> (malloc (sizeof (WriteBuffer *) * D_RO (dir)->capacity));
+
+    for (int i = 0; i < D_RO (dir)->capacity; ++i) {
+        POBJ_ALLOC (pop, &D_RO (D_RO (dir)->segment)[i], struct Segment, sizeof (struct Segment),
+                    NULL, NULL);
+        D_RW (D_RW (D_RW (dir)->segment)[i])->initSegment (static_cast<size_t> (log2 (initCap)));
+
+        D_RW (dir)->bufnodes[i] =
+            new WriteBuffer (static_cast<size_t> (log2 (initCap)), 32 * (1 + 0.3));
+        curSegmentNum.fetch_add (1, std::memory_order_relaxed);
+    }
+    bufferLogNodes = new buflog::linkedredolog::BufferLogNode[nthreads];
+    for (size_t k = 0; k < nthreads; k++) {
+        void *log_base_addr = pmemobj_direct (logAddrs[k]);
+        bufferLogNodes[k].Create ((char *)log_base_addr, 10 * 1024 * 1024 * 1024LU / nthreads);
+    }
+}
+
 void CCEH::Insert (PMEMobjpool *pop, Key_t &key, Value_t value) {
     auto f_hash = hash_funcs[0](&key, sizeof (Key_t), f_seed);
 
@@ -872,14 +902,20 @@ RETRY:
     return NONE;
 }
 
-void CCEH::Recovery (PMEMobjpool *pop) {
+void CCEH::Recovery (PMEMobjpool *pop, int nthreads) {
     size_t i = 0;
+    D_RW (dir)->bufnodes =
+        reinterpret_cast<WriteBuffer **> (malloc (sizeof (WriteBuffer *) * D_RO (dir)->capacity));
+    bufferLogNodes = new buflog::linkedredolog::BufferLogNode[nthreads];
     while (i < D_RO (dir)->capacity) {
         size_t depth_cur = D_RO (D_RO (D_RO (dir)->segment)[i])->local_depth;
+        // re-construct buffer
+        D_RW (dir)->bufnodes[i] = new WriteBuffer (depth_cur, 32 * (1 + 0.3));
         size_t stride = pow (2, D_RO (dir)->depth - depth_cur);
         size_t buddy = i + stride;
         if (buddy == D_RO (dir)->capacity) break;
         for (int j = buddy - 1; i < j; j--) {
+            D_RW (dir)->bufnodes[j] = D_RW (dir)->bufnodes[i];
             if (D_RO (D_RO (D_RO (dir)->segment)[j])->local_depth != depth_cur) {
                 D_RW (D_RW (dir)->segment)[j] = D_RO (D_RO (dir)->segment)[i];
                 pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[i],
@@ -890,6 +926,48 @@ void CCEH::Recovery (PMEMobjpool *pop) {
     }
     pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[0],
                      sizeof (TOID (struct Segment)) * D_RO (dir)->capacity);
+}
+
+inline uint64_t NowMicros () {
+    static constexpr uint64_t kUsecondsPerSecond = 1000000;
+    struct ::timeval tv;
+    ::gettimeofday (&tv, nullptr);
+    return static_cast<uint64_t> (tv.tv_sec) * kUsecondsPerSecond + tv.tv_usec;
+}
+
+void CCEH::BufferRecovery (PMEMobjpool *pop, uint64_t nthread, int tid, PMEMoid *logAddrs) {
+    // Recovery all the data at once.
+    uint64_t start1_ = NowMicros ();
+    // ensure the consistent of the directory entries
+    DEBUG ("Start Recovery Buffer ..");
+    uint64_t cntRecovery = 0;
+    void *log_base_addr = pmemobj_direct (logAddrs[tid]);
+    bufferLogNodes[tid].Open ((char *)log_base_addr);
+
+    char *start = (char *)log_base_addr + 256 + 17;
+    uint64_t test = 256 + 17;
+    while (1) {
+        uint64_t key = *(uint64_t *)(start - 16);
+        uint64_t val = *(uint64_t *)(start - 8);
+        uint8_t tag = *(uint8_t *)(start);
+        // printf ("tag = %hhu \n", tag);
+        if (tag != 16 && tag != 18) break;
+
+        auto f_hash = hash_funcs[0](&key, sizeof (Key_t), f_seed);
+        auto x = (f_hash >> (8 * sizeof (f_hash) - D_RO (dir)->depth));
+
+        D_RW (dir)->bufnodes[x]->PutWithLog (key, (char *)val);
+
+        start = start + 27;
+        test += 27;
+        cntRecovery++;
+    }
+
+    // ptr->bufnode_ = new WriteBuffer (ptr->local_depth, 32 + (1 + 0.3));
+
+    uint64_t end1_ = NowMicros ();
+    printf ("Finished Recovery in %2.10f secs (total = %lu) \n", (end1_ - start1_) / 1000000.0,
+            cntRecovery);
 }
 
 double CCEH::Utilization (void) {
@@ -945,4 +1023,72 @@ Value_t CCEH::FindAnyway (Key_t &key) {
         }
     }
     return NONE;
+}
+
+void CCEH::InsertWithLog (PMEMobjpool *pop, Key_t &key, Value_t value, int tid) {
+    auto f_hash = hash_funcs[0](&key, sizeof (Key_t), f_seed);
+
+retry:
+    auto x = (f_hash >> (8 * sizeof (f_hash) - D_RO (dir)->depth));
+    auto target = D_RO (D_RO (dir)->segment)[x];
+
+    auto *bufnode = D_RO (dir)->bufnodes[x];
+
+    auto data = D_RW (target)->logPtr.getData ();
+    auto next_ = 0;
+    // data == 256 means it is the first time to use this buffer
+    if (data == 256) {
+        next_ = bufferLogNodes[tid].Append (buflog::kDataLogNodeCheckpoint, key, (uint64_t)value,
+                                            data, false);
+    } else {
+        next_ = bufferLogNodes[tid].Append (buflog::kDataLogNodeValid, key, (uint64_t)value, data,
+                                            false);
+    }
+    D_RW (target)->logPtr.setData (tid, next_);
+    // pmemobj_persist (pop, (char *)&D_RO (target)->logPtr, sizeof (buflog_recovery::LogPtr));
+    // pop.root ()->BufferLogNodes.persist ();
+    // D_RW (target)->logPtr.persist ();
+
+    bufnode->Lock ();
+
+    if (D_RO (target)->local_depth != bufnode->local_depth) {
+        bufnode->Unlock ();
+        std::this_thread::yield ();
+        goto retry;
+    }
+
+    bool res = bufnode->Put (key, (char *)value);
+    if (res) {
+        // successfully insert to bufnode
+        bufnode->Unlock ();
+    } else {
+        data = D_RW (target)->logPtr.getData ();
+        next_ = bufferLogNodes[tid].Append (buflog::kDataLogNodeCheckpoint, key, (uint64_t)value,
+                                            data, false);
+        D_RW (target)->logPtr.setData (tid, next_);
+
+        curMCNum.fetch_add (1, std::memory_order_relaxed);
+        // bufnode is full. merge to CCEH
+#ifndef CONFIG_OUT_OF_PLACE_MERGE
+        auto iter = bufnode->Begin ();
+        while (iter.Valid ()) {
+            auto &kv = *iter;
+            Key_t key = kv.key;
+            Value_t val = kv.val;
+            insert (pop, key, val, false);
+            ++iter;
+        }
+#ifdef WITHOUT_FLUSH
+        pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[x],
+                         sizeof (TOID (struct Segment)));
+#endif
+        bufnode->Reset ();
+        bufnode->Unlock ();
+        goto retry;
+#else
+        mergeBufAndSplitWhenNeeded (pop, bufnode, target, f_hash);
+        bufnode->Unlock ();
+        goto retry;
+#endif
+    }
 }

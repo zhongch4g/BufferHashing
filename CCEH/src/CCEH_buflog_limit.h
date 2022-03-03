@@ -139,6 +139,7 @@ struct Segment {
     int64_t sema = 0;
     size_t local_depth;
     CCEH *cceh;
+    buflog::LogPtr logPtr;
 };
 
 struct Directory {
@@ -205,8 +206,10 @@ public:
     ~CCEH (void) {}
     void initCCEH (PMEMobjpool *);
     void initCCEH (PMEMobjpool *, size_t, uint64_t);
+    void initCCEH (PMEMobjpool *, size_t, uint64_t, size_t, PMEMoid *);
 
     bool Insert (PMEMobjpool *, Key_t &, Value_t);
+    bool InsertWithLog (PMEMobjpool *, Key_t &, Value_t, int);
     void insert (PMEMobjpool *, Key_t &, Value_t, bool with_lock);
     void mergeBufAndSplitWhenNeeded (PMEMobjpool *, WriteBuffer *bufnode, Segment_toid &target,
                                      size_t x);
@@ -226,6 +229,7 @@ public:
     // to limit the number of buffer in use
     std::atomic<size_t> curBufferNum;
     std::atomic<size_t> curSegmentNum;
+    buflog::linkedredolog::BufferLogNode *bufferLogNodes;
 
 private:
     TOID (struct Directory) dir;

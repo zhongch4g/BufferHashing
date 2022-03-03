@@ -1,3 +1,2 @@
-[2022-02-25 13:45:38.736119][96672] [ INFO] [CCEH_buflog_dual.cpp mergeBufAndSplitWhenNeeded:803] Double Directory Begin
-[2022-02-25 13:45:48.594914][96672] [ INFO] [CCEH_buflog_dual.cpp mergeBufAndSplitWhenNeeded:803] Double Directory Begin
-[2022-02-25 13:46:10.716989][96672] [ INFO] [CCEH_buflog_dual.cpp mergeBufAndSplitWhenNeeded:803] Double Directory Begin
+[2022-02-27 15:54:49.774651][13568] [ INFO] [CCEH_buflog_dual.cpp mergeBufAndSplitWhenNeeded:807] Double Directory Begin
+[2022-02-27 15:55:47.789687][91264] [ INFO] [CCEH_buflog_dual.cpp mergeBufAndSplitWhenNeeded:807] Double Directory Begin

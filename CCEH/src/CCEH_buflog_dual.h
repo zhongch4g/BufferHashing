@@ -17,9 +17,7 @@
 
 #define TOID_ARRAY(x) TOID (x)
 
-
 namespace cceh_buflog_dual {
-
 
 typedef size_t Key_t;
 typedef const char* Value_t;
@@ -232,9 +230,12 @@ public:
 
     bool crashed = true;
     void transferBuffer (void);
+    void forceReleaseAllBuffers (PMEMobjpool*, TOID (CCEH));
+    void flushAllBuffers (PMEMobjpool*);
     void BufferCheck (void);
     bool increaseBuffer (void);
     void releaseAllBuffers (void);
+    void acceptAllBuffers (void);
 
     BufferConfig bufferConfig;           // to record the basic buffer configuration
     std::atomic<uint32_t> curBufferNum;  // to record current # of buffer

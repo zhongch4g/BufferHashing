@@ -45,6 +45,57 @@ DEFINE_uint64 (write, 1 * 1000000, "Number of read operations");
 DEFINE_bool (hist, false, "");
 DEFINE_string (benchmarks, "load,readall", "");
 DEFINE_int32 (gChoice, 0, "Write Percentage");
+DEFINE_bool (withlog, false, "");
+DEFINE_bool (recovery, false, "");
+
+size_t kLogSize = 10 * 1024 * 1024 * 1024LU;  // 10G
+struct LogRoot {
+    size_t num;
+    PMEMoid log_addrs[64];
+};
+
+LogRoot* log_root;
+PMEMobjpool* log_pop;
+
+void createLog () {
+    // create log for each threads
+
+    std::string filepath = "/mnt/pmem/cceh_buflog_wal";
+    remove (filepath.c_str ());
+
+    log_pop = pmemobj_create (filepath.c_str (), POBJ_LAYOUT_NAME (wal), kLogSize * 1.5, 0666);
+    if (log_pop == nullptr) {
+        std::cerr << "create log file fail. " << filepath << std::endl;
+        exit (1);
+    }
+
+    PMEMoid g_root = pmemobj_root (log_pop, sizeof (LogRoot));
+    log_root = reinterpret_cast<LogRoot*> (pmemobj_direct (g_root));
+
+    size_t log_size = kLogSize / FLAGS_thread;
+    for (int i = 0; i < FLAGS_thread; i++) {
+        int ret = pmemobj_alloc (log_pop, &log_root->log_addrs[i], log_size, 0, NULL, NULL);
+        if (ret) {
+            printf ("alloc error for log");
+            exit (1);
+        }
+        // void* log_base_addr = pmemobj_direct (log_root->log_addrs[i]);
+        // pmemobj_memset_persist (log_pop, log_base_addr, 0, log_size);
+        // _mm_sfence ();
+    }
+}
+
+void openLog () {
+    std::string filepath = "/mnt/pmem/cceh_buflog_wal";
+    log_pop = pmemobj_open (filepath.c_str (), POBJ_LAYOUT_NAME (wal));
+    if (log_pop == nullptr) {
+        std::cerr << "create log file fail. " << filepath << std::endl;
+        exit (1);
+    }
+
+    PMEMoid g_root = pmemobj_root (log_pop, sizeof (LogRoot));
+    log_root = reinterpret_cast<LogRoot*> (pmemobj_direct (g_root));
+}
 
 namespace {
 
@@ -350,7 +401,7 @@ static std::string TrimSpace (std::string s) {
 #endif
 
 }  // namespace
-
+#define CREATE_MODE_RW (S_IWRITE | S_IREAD)
 #define POOL_SIZE (1073741824L * 100L)  // 20GB
 class Benchmark {
 public:
@@ -361,32 +412,41 @@ public:
     RandomKeyTrace* key_trace_;
     size_t trace_size_;
     PMEMobjpool* pop_;
-    PMEMobjpool* pop0_;
-    PMEMobjpool* pop1_;
-    std::vector<PMEMobjpool*> vpop_;
     TOID (CCEH) hashtable_;
-    TOID (CCEH) hashtable0_;
-    TOID (CCEH) hashtable1_;
-    std::vector<TOID (CCEH)> vhashtable_;
     uint32_t ins_num_;
+    std::atomic<uint32_t> thread_count;
     Benchmark ()
         : num_ (FLAGS_num),
           value_size_ (FLAGS_value_size),
           reads_ (FLAGS_read),
           writes_ (FLAGS_write),
           key_trace_ (nullptr),
-          hashtable_ (OID_NULL) {
-        remove (FLAGS_filepath.c_str ());  // delete the mapped file.
-        pop_ = pmemobj_create (FLAGS_filepath.c_str (), "CCEH", POOL_SIZE, 0666);
-        if (!pop_) {
-            perror ("pmemoj_create");
-            exit (1);
-        }
-
+          hashtable_ (OID_NULL),
+          thread_count (0) {
         const size_t initialSize = 1024 * FLAGS_initsize;  // 16 million initial
-        hashtable_ = POBJ_ROOT (pop_, CCEH);
-        printf ("CCEH-BUFLOG \n");
-        D_RW (hashtable_)->initCCEH (pop_, initialSize);
+        if (!FLAGS_recovery) {
+            remove (FLAGS_filepath.c_str ());  // delete the mapped file.
+            pop_ = pmemobj_create (FLAGS_filepath.c_str (), "CCEH", POOL_SIZE, 0666);
+            if (!pop_) {
+                perror ("pmemoj_create");
+                exit (1);
+            }
+            hashtable_ = POBJ_ROOT (pop_, CCEH);
+            if (!FLAGS_withlog) {
+                printf ("CCEH-BUFLOG \n");
+                D_RW (hashtable_)->initCCEH (pop_, initialSize);
+            } else {
+                printf ("CCEH-BUFLOG-LOG \n");
+                createLog ();
+                D_RW (hashtable_)->initCCEH (pop_, initialSize, FLAGS_thread, log_root->log_addrs);
+            }
+        } else {
+            printf ("CCEH-BUFLOG-RECOVERY \n");
+            pop_ = pmemobj_open (FLAGS_filepath.c_str (), "CCEH");
+            hashtable_ = POBJ_ROOT (pop_, CCEH);
+            openLog ();
+            D_RW (hashtable_)->Recovery (pop_, FLAGS_thread);
+        }
     }
 
     ~Benchmark () {}
@@ -419,8 +479,10 @@ public:
             if (name == "load") {
                 fresh_db = true;
                 method = &Benchmark::DoWrite;
-            }
-            if (name == "loadlat") {
+            } else if (name == "recovery") {
+                fresh_db = true;
+                method = &Benchmark::DoRecovery;
+            } else if (name == "loadlat") {
                 fresh_db = true;
                 print_hist = true;
                 method = &Benchmark::DoWriteLat;
@@ -684,7 +746,12 @@ public:
             for (; j < batch && key_iterator.Valid (); j++) {
                 inserted++;
                 size_t ikey = key_iterator.Next ();
-                D_RW (hashtable_)->Insert (pop_, ikey, reinterpret_cast<Value_t> (ikey));
+                if (FLAGS_withlog) {
+                    D_RW (hashtable_)
+                        ->InsertWithLog (pop_, ikey, reinterpret_cast<Value_t> (ikey), thread->tid);
+                } else {
+                    D_RW (hashtable_)->Insert (pop_, ikey, reinterpret_cast<Value_t> (ikey));
+                }
             }
             bool res = thread->stats.FinishedBatchOp (j);
             if (!res) {
@@ -696,6 +763,22 @@ public:
                 }
             }
         }
+
+        thread->stats.real_finish_ = NowMicros ();
+
+        return;
+    }
+
+    void DoRecovery (ThreadState* thread) {
+        uint64_t batch = FLAGS_batch;
+        if (key_trace_ == nullptr) {
+            perror ("DoWrite lack key_trace_ initialization.");
+            return;
+        }
+
+        thread->stats.Start ();
+
+        D_RW (hashtable_)->BufferRecovery (pop_, FLAGS_thread, thread->tid, log_root->log_addrs);
 
         thread->stats.real_finish_ = NowMicros ();
 

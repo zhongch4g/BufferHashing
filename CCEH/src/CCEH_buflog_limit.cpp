@@ -269,6 +269,43 @@ void CCEH::initCCEH (PMEMobjpool *pop, size_t initCap, uint64_t bufferNum) {
     }
 }
 
+void CCEH::initCCEH (PMEMobjpool *pop, size_t initCap, uint64_t bufferNum, size_t nthreads,
+                     PMEMoid *logAddrs) {
+    bufferConfig = (BufferConfig *)malloc (sizeof (BufferConfig));
+    bufferConfig->setKBufNumMax (bufferNum);
+    INFO ("Preset MAX number of buffers = %lu \n", bufferNum);
+    curBufferNum = 0;
+    curSegmentNum = 0;
+
+    crashed = true;
+    POBJ_ALLOC (pop, &dir, struct Directory, sizeof (struct Directory), NULL, NULL);
+    D_RW (dir)->initDirectory (static_cast<size_t> (log2 (initCap)));
+    POBJ_ALLOC (pop, &D_RW (dir)->segment, TOID (struct Segment),
+                sizeof (TOID (struct Segment)) * D_RO (dir)->capacity, NULL, NULL);
+
+    // Create and initial the in-DRAM buffer
+    D_RW (dir)->bufnodes =
+        reinterpret_cast<WriteBuffer **> (malloc (sizeof (WriteBuffer *) * D_RO (dir)->capacity));
+
+    for (int i = 0; i < D_RO (dir)->capacity; ++i) {
+        POBJ_ALLOC (pop, &D_RO (D_RO (dir)->segment)[i], struct Segment, sizeof (struct Segment),
+                    NULL, NULL);
+        D_RW (D_RW (D_RW (dir)->segment)[i])->initSegment (static_cast<size_t> (log2 (initCap)));
+        if (curBufferNum.load () < bufferConfig->getKBufNumMax ()) {
+            D_RW (dir)->bufnodes[i] =
+                new WriteBuffer (static_cast<size_t> (log2 (initCap)), 32 * (1 + 0.3));
+            // add the number of segments and buffers
+            curBufferNum.fetch_add (1, std::memory_order_relaxed);
+        }
+        curSegmentNum.fetch_add (1, std::memory_order_relaxed);
+    }
+    bufferLogNodes = new buflog::linkedredolog::BufferLogNode[nthreads];
+    for (size_t k = 0; k < nthreads; k++) {
+        void *log_base_addr = pmemobj_direct (logAddrs[k]);
+        bufferLogNodes[k].Create ((char *)log_base_addr, 10 * 1024 * 1024 * 1024LU / nthreads);
+    }
+}
+
 bool CCEH::Insert (PMEMobjpool *pop, Key_t &key, Value_t value) {
     auto f_hash = hash_funcs[0](&key, sizeof (Key_t), f_seed);
     bool isMinorCompaction = false;
@@ -980,4 +1017,72 @@ Value_t CCEH::FindAnyway (Key_t &key) {
         }
     }
     return NONE;
+}
+
+bool CCEH::InsertWithLog (PMEMobjpool *pop, Key_t &key, Value_t value, int tid) {
+    auto f_hash = hash_funcs[0](&key, sizeof (Key_t), f_seed);
+    bool isMinorCompaction = false;
+retry:
+    auto x = (f_hash >> (8 * sizeof (f_hash) - D_RO (dir)->depth));
+    auto target = D_RO (D_RO (dir)->segment)[x];
+
+    auto *bufnode = D_RO (dir)->bufnodes[x];
+    if (bufnode == nullptr) {
+        insert (pop, key, value, true);
+        return isMinorCompaction;
+    }
+
+    auto data = D_RW (target)->logPtr.getData ();
+    auto next_ = 0;
+    // data == 256 means it is the first time to use this buffer
+    if (data == 256) {
+        next_ = bufferLogNodes[tid].Append (buflog::kDataLogNodeCheckpoint, key, (uint64_t)value,
+                                            data, false);
+    } else {
+        next_ = bufferLogNodes[tid].Append (buflog::kDataLogNodeValid, key, (uint64_t)value, data,
+                                            false);
+    }
+    D_RW (target)->logPtr.setData (tid, next_);
+    bufnode->Lock ();
+
+    if (D_RO (target)->local_depth != bufnode->local_depth) {
+        bufnode->Unlock ();
+        std::this_thread::yield ();
+        goto retry;
+    }
+
+    bool res = bufnode->Put (key, (char *)value);
+    if (res) {
+        // successfully insert to bufnode
+        bufnode->Unlock ();
+        return isMinorCompaction;
+    } else {
+        data = D_RW (target)->logPtr.getData ();
+        next_ = bufferLogNodes[tid].Append (buflog::kDataLogNodeCheckpoint, key, (uint64_t)value,
+                                            data, false);
+        D_RW (target)->logPtr.setData (tid, next_);
+        // bufnode is full. merge to CCEH
+#ifndef CONFIG_OUT_OF_PLACE_MERGE
+        auto iter = bufnode->Begin ();
+        while (iter.Valid ()) {
+            auto &kv = *iter;
+            Key_t key = kv.key;
+            Value_t val = kv.val;
+            insert (pop, key, val, false);
+            ++iter;
+        }
+#ifdef WITHOUT_FLUSH
+        pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[x],
+                         sizeof (TOID (struct Segment)));
+#endif
+        bufnode->Reset ();
+        bufnode->Unlock ();
+        goto retry;
+#else
+        isMinorCompaction = true;
+        mergeBufAndSplitWhenNeeded (pop, bufnode, target, f_hash);
+        bufnode->Unlock ();
+        goto retry;
+#endif
+    }
 }

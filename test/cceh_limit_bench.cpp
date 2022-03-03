@@ -49,9 +49,45 @@ DEFINE_int32 (writeThreads, 1,
 DEFINE_int32 (bufferNum, -1, "");
 DEFINE_int32 (bufferNum0, -1, "");
 DEFINE_int32 (bufferNum1, -1, "");
-DEFINE_int32 (bufferNum2, -1, "");
 DEFINE_int32 (gChoice, 0, "Write Percentage");
+DEFINE_bool (withlog, false, "");
 
+size_t kLogSize = 10 * 1024 * 1024 * 1024LU;  // 10G
+struct LogRoot {
+    size_t num;
+    PMEMoid log_addrs[64];
+};
+
+LogRoot* log_root;
+PMEMobjpool* log_pop;
+
+void createLog () {
+    // create log for each threads
+
+    std::string filepath = "/mnt/pmem/cceh_buflog_wal";
+    remove (filepath.c_str ());
+
+    log_pop = pmemobj_create (filepath.c_str (), POBJ_LAYOUT_NAME (wal), kLogSize * 1.5, 0666);
+    if (log_pop == nullptr) {
+        std::cerr << "create log file fail. " << filepath << std::endl;
+        exit (1);
+    }
+
+    PMEMoid g_root = pmemobj_root (log_pop, sizeof (LogRoot));
+    log_root = reinterpret_cast<LogRoot*> (pmemobj_direct (g_root));
+
+    size_t log_size = kLogSize / FLAGS_thread;
+    for (int i = 0; i < FLAGS_thread; i++) {
+        int ret = pmemobj_alloc (log_pop, &log_root->log_addrs[i], log_size, 0, NULL, NULL);
+        if (ret) {
+            printf ("alloc error for log");
+            exit (1);
+        }
+        // void* log_base_addr = pmemobj_direct (log_root->log_addrs[i]);
+        // pmemobj_memset_persist (log_pop, log_base_addr, 0, log_size);
+        // _mm_sfence ();
+    }
+}
 namespace {
 
 class Stats {
@@ -366,29 +402,22 @@ public:
     size_t reads_;
     size_t writes_;
     RandomKeyTrace* key_trace_;
-    RandomKeyTrace* key_trace1_;
-    RandomKeyTrace* key_trace2_;
+    RandomKeyTrace* key_trace0_;
     size_t trace_size_;
     PMEMobjpool* pop_;
     PMEMobjpool* pop0_;
     PMEMobjpool* pop1_;
-    PMEMobjpool* pop2_;
-    std::vector<PMEMobjpool*> vpop_;
     TOID (CCEH) hashtable_;
     TOID (CCEH) hashtable0_;
     TOID (CCEH) hashtable1_;
-    TOID (CCEH) hashtable2_;
-    std::vector<TOID (CCEH)> vhashtable_;
     uint32_t ins_num_;
     std::atomic<uint32_t> trace_counter_;
     std::atomic<uint32_t> trace_counter1_;
     std::atomic<uint32_t> trace_counter2_;
     std::atomic<uint32_t> totalMinorCompaction0_;
     std::atomic<uint32_t> totalMinorCompaction1_;
-    std::atomic<uint32_t> totalMinorCompaction2_;
     std::atomic<uint32_t> passCounter0_;
     std::atomic<uint32_t> passCounter1_;
-    std::atomic<uint32_t> passCounter2_;
     std::atomic<uint32_t> releaseCount_;
     double avg_throughput;
 
@@ -409,9 +438,15 @@ public:
 
         const size_t initialSize = 1024 * FLAGS_initsize;  // 16 million initial
         hashtable_ = POBJ_ROOT (pop_, CCEH);
-        // D_RW (hashtable_)->initCCEH (pop_, initialSize);
-        printf ("Single CCEH \n");
-        D_RW (hashtable_)->initCCEH (pop_, initialSize, FLAGS_bufferNum);
+        if (!FLAGS_withlog) {
+            printf ("CCEH-BUFLOG-LIMIT \n");
+            D_RW (hashtable_)->initCCEH (pop_, initialSize, FLAGS_bufferNum);
+        } else {
+            printf ("CCEH-BUFLOG-LIMIT-LOG \n");
+            createLog ();
+            D_RW (hashtable_)
+                ->initCCEH (pop_, initialSize, FLAGS_bufferNum, FLAGS_thread, log_root->log_addrs);
+        }
     }
 
     Benchmark (uint32_t ins_num)
@@ -420,10 +455,9 @@ public:
           reads_ (FLAGS_read),
           writes_ (FLAGS_write),
           key_trace_ (nullptr),
-          key_trace1_ (nullptr),
+          key_trace0_ (nullptr),
           hashtable0_ (OID_NULL),
-          hashtable1_ (OID_NULL),
-          ins_num_ (FLAGS_ins_num) {
+          hashtable1_ (OID_NULL) {
         const size_t initialSize = 1024 * FLAGS_initsize;  // 16 million initial
 
         std::string file_path0 = "/mnt/pmem/CCEH0.data";
@@ -451,75 +485,15 @@ public:
         }
         hashtable1_ = POBJ_ROOT (pop1_, CCEH);
         D_RW (hashtable1_)->initCCEH (pop1_, initialSize, FLAGS_bufferNum1);
-    }
-
-    Benchmark (uint32_t ins_num, uint32_t ins_n)
-        : num_ (FLAGS_num),
-          value_size_ (FLAGS_value_size),
-          reads_ (FLAGS_read),
-          writes_ (FLAGS_write),
-          key_trace_ (nullptr),
-          key_trace1_ (nullptr),
-          key_trace2_ (nullptr),
-          hashtable0_ (OID_NULL),
-          hashtable1_ (OID_NULL),
-          hashtable2_ (OID_NULL),
-          ins_num_ (FLAGS_ins_num),
-          totalMinorCompaction0_ (0),
-          totalMinorCompaction1_ (0),
-          totalMinorCompaction2_ (0),
-          passCounter0_ (0),
-          passCounter1_ (0),
-          passCounter2_ (0),
-          avg_throughput (0) {
-        const size_t initialSize = 1024 * FLAGS_initsize;  // 16 million initial
-        std::string file_path0 = "/mnt/pmem/CCEH0.data";
-
-        printf ("Remove pmem file : %s \n", (file_path0).c_str ());
-        remove ((file_path0).c_str ());
-        pop0_ = pmemobj_create (file_path0.c_str (), "CCEH0", POOL_SIZE, 0666);
-
-        if (!pop0_) {
-            perror ((file_path0 + "\npmemoj_create 0").c_str ());
-            exit (1);
-        }
-        hashtable0_ = POBJ_ROOT (pop0_, CCEH);
-        D_RW (hashtable0_)->initCCEH (pop0_, initialSize, FLAGS_bufferNum0);
-
-        printf ("...................................... \n");
-        std::string file_path1 = "/mnt/pmem/CCEH1.data";
-        printf ("Remove pmem file : %s \n", (file_path1).c_str ());
-        remove ((file_path1).c_str ());
-        pop1_ = pmemobj_create (file_path1.c_str (), "CCEH1", POOL_SIZE, 0666);
-
-        if (!pop1_) {
-            perror ((file_path1 + "\npmemoj_create 1").c_str ());
-            exit (1);
-        }
-        hashtable1_ = POBJ_ROOT (pop1_, CCEH);
-        D_RW (hashtable1_)->initCCEH (pop1_, initialSize, FLAGS_bufferNum1);
-
-        printf ("...................................... \n");
-        std::string file_path2 = "/mnt/pmem/CCEH2.data";
-        printf ("Remove pmem file : %s \n", (file_path2).c_str ());
-        remove ((file_path2).c_str ());
-        pop2_ = pmemobj_create (file_path2.c_str (), "CCEH2", POOL_SIZE, 0666);
-
-        if (!pop2_) {
-            perror ((file_path2 + "\npmemoj_create 2").c_str ());
-            exit (1);
-        }
-        hashtable2_ = POBJ_ROOT (pop2_, CCEH);
-        D_RW (hashtable2_)->initCCEH (pop2_, initialSize, FLAGS_bufferNum2);
     }
 
     ~Benchmark () {}
 
     void Run () {
         trace_size_ = FLAGS_num;
-        key_trace_ = new RandomKeyTrace (trace_size_);   // a 1 dim trace_size_ long vector
-        key_trace1_ = new RandomKeyTrace (trace_size_);  // a 1 dim trace_size_ long vector
-        key_trace2_ = new RandomKeyTrace (trace_size_);  // a 1 dim trace_size_ long vector
+        key_trace_ = new RandomKeyTrace (trace_size_);  // a 1 dim trace_size_ long vector
+        if (FLAGS_ins_num > 1)
+            key_trace0_ = new RandomKeyTrace (trace_size_);  // a 1 dim trace_size_ long vector
         if (reads_ == 0) {
             reads_ = key_trace_->count_;
             FLAGS_read = key_trace_->count_;
@@ -545,27 +519,12 @@ public:
             if (name == "load") {
                 fresh_db = true;
                 method = &Benchmark::DoWrite;
-            }
-            if (name == "cceh2") {
+            } else if (name == "cceh2") {
                 fresh_db = true;
                 key_trace_->Randomize ();
-                key_trace1_->Randomize ();
+                key_trace0_->Randomize ();
                 method = &Benchmark::cceh2;
-            }
-            if (name == "cceh3") {
-                fresh_db = true;
-                key_trace_->Randomize ();
-                key_trace1_->Randomize ();
-                key_trace2_->Randomize ();
-                method = &Benchmark::cceh3;
-            }
-            if (name == "cceh2read") {
-                fresh_db = true;
-                key_trace_->Randomize ();
-                key_trace1_->Randomize ();
-                method = &Benchmark::cceh2read;
-            }
-            if (name == "loadlat") {
+            } else if (name == "loadlat") {
                 fresh_db = true;
                 print_hist = true;
                 method = &Benchmark::DoWriteLat;
@@ -625,14 +584,6 @@ public:
                 fresh_db = false;
                 key_trace_->Randomize ();
                 method = &Benchmark::YCSBG;
-            } else if (name == "writenwrite") {
-                fresh_db = false;
-                key_trace_->Randomize ();
-                method = &Benchmark::writenwrite;
-            } else if (name == "bufferexchange") {
-                fresh_db = false;
-                key_trace_->Randomize ();
-                method = &Benchmark::bufferexchange;
             }
             IPMWatcher watcher (name);
             if (method != nullptr) RunBenchmark (thread, name, method, print_hist);
@@ -832,7 +783,12 @@ public:
             for (; j < batch && key_iterator.Valid (); j++) {
                 inserted++;
                 size_t ikey = key_iterator.Next ();
-                D_RW (hashtable_)->Insert (pop_, ikey, reinterpret_cast<Value_t> (ikey));
+                if (FLAGS_withlog) {
+                    D_RW (hashtable_)
+                        ->InsertWithLog (pop_, ikey, reinterpret_cast<Value_t> (ikey), thread->tid);
+                } else {
+                    D_RW (hashtable_)->Insert (pop_, ikey, reinterpret_cast<Value_t> (ikey));
+                }
             }
             bool res = thread->stats.FinishedBatchOp (j);
             if (!res) printf ("[]%lu\n", D_RW (hashtable_)->curBufferNum.load ());
@@ -859,7 +815,7 @@ public:
         if (thread->tid < nthread) {  // 0
             key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
         } else {  // 1
-            key_iterator = key_trace1_->iterate_between (start_offset, start_offset + interval);
+            key_iterator = key_trace0_->iterate_between (start_offset, start_offset + interval);
         }
         printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
                 start_offset + interval);
@@ -899,107 +855,6 @@ public:
         // printf ("Number of Segments | h0 = %u | h1 = %u \n",
         //         D_RW (hashtable0_)->curSegmentNum.load (std::memory_order_relaxed),
         //         D_RW (hashtable1_)->curSegmentNum.load (std::memory_order_relaxed));
-        return;
-    }
-
-    void cceh3 (ThreadState* thread) {
-        uint64_t batch = FLAGS_batch;
-        if (FLAGS_ins_num != 3) {
-            perror ("The # of CCEH instance must be 2 \n");
-        }
-        if (key_trace_ == nullptr) {
-            perror ("DoWrite lack key_trace_ initialization.");
-        }
-        int nthread = FLAGS_thread / FLAGS_ins_num;  // 4 how many threads each CCEH
-        uint32_t interval = num_ / nthread;          // cut the trace to num_/1M parts
-        size_t start_offset = (thread->tid % nthread) * interval;
-        printf ("type %f \n", thread->tid * 1.0 / nthread);
-        RandomKeyTrace::RangeIterator key_iterator;
-        if (thread->tid / nthread == 0) {  // 0
-            key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
-        } else if (thread->tid / nthread == 1) {  // 1
-            key_iterator = key_trace1_->iterate_between (start_offset, start_offset + interval);
-        } else if (thread->tid / nthread == 2) {
-            key_iterator = key_trace2_->iterate_between (start_offset, start_offset + interval);
-        } else {
-            perror ("trace distribute error . \n");
-            exit (1);
-        }
-        printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
-                start_offset + interval);
-
-        thread->stats.Start ();
-        Duration duration (FLAGS_readtime, reads_);
-        while (!duration.Done (batch) && key_iterator.Valid ()) {
-            uint64_t j = 0;
-            for (; j < batch && key_iterator.Valid (); j++) {
-                size_t ikey = key_iterator.Next ();
-                if (thread->tid / nthread == 0) {
-                    D_RW (hashtable0_)->Get (ikey);
-                } else if (thread->tid / nthread == 1) {
-                    D_RW (hashtable1_)->Get (ikey);
-                } else if (thread->tid / nthread == 2) {
-                    D_RW (hashtable2_)->Insert (pop2_, ikey, reinterpret_cast<Value_t> (ikey));
-                } else {
-                    perror ("threads distribute error . \n");
-                    exit (1);
-                }
-            }
-            // check every 10,000 ops
-            bool timOrOps = thread->stats.FinishedBatchOp (j);
-        }
-        thread->stats.real_finish_ = NowMicros ();
-
-        // printf ("Number of Segments | h0 = %u | h1 = %u | h2 = %u \n",
-        //         D_RW (hashtable0_)->curSegmentNum.load (std::memory_order_relaxed),
-        //         D_RW (hashtable1_)->curSegmentNum.load (std::memory_order_relaxed),
-        //         D_RW (hashtable2_)->curSegmentNum.load (std::memory_order_relaxed));
-        return;
-    }
-
-    void cceh2read (ThreadState* thread) {
-        uint64_t batch = FLAGS_batch;
-        if (FLAGS_ins_num != 2) {
-            perror ("The # of CCEH instance must be 2 \n");
-        }
-        if (key_trace_ == nullptr) {
-            perror ("DoWrite lack key_trace_ initialization.");
-        }
-        int nthread = FLAGS_thread / FLAGS_ins_num;  // 4
-        size_t interval = num_ / nthread;            // cut the trace to num_/1M parts
-        size_t start_offset = (thread->tid % nthread) * interval;
-
-        RandomKeyTrace::RangeIterator key_iterator;
-        if (thread->tid < nthread) {  // 0
-            key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
-        } else {  // 1
-            key_iterator = key_trace1_->iterate_between (start_offset, start_offset + interval);
-        }
-        printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
-                start_offset + interval);
-        Duration duration (FLAGS_readtime, reads_);
-        thread->stats.Start ();
-        while (!duration.Done (batch) && key_iterator.Valid ()) {
-            uint64_t j = 0;
-            for (; j < batch && key_iterator.Valid (); j++) {
-                size_t ikey = key_iterator.Next ();
-                if (thread->tid < nthread) {
-                    D_RW (hashtable0_)->Get (ikey);
-                } else if (thread->tid >= nthread) {
-                    if (thread->ycsb_gen.NextG (FLAGS_gChoice) == kYCSB_Write) {
-                        D_RW (hashtable1_)->Insert (pop1_, ikey, reinterpret_cast<Value_t> (ikey));
-                    } else {
-                        D_RW (hashtable1_)->Get (ikey);
-                    }
-                } else {
-                    perror ("threads distribute error . \n");
-                    exit (1);
-                }
-            }
-            // check every 10,000 ops
-            thread->stats.FinishedBatchOp (j);
-        }
-        thread->stats.real_finish_ = NowMicros ();
         return;
     }
 
@@ -1286,93 +1141,6 @@ public:
         return;
     }
 
-    void writenwrite (ThreadState* thread) {
-        uint64_t batch = FLAGS_batch;
-        if (key_trace_ == nullptr) {
-            perror ("write & hybrid key_trace_ initialization.");
-            return;
-        }
-        if (FLAGS_ins_num <= 1) {
-            perror ("instance must larger than 1 \n");
-            exit (1);
-        }
-
-        size_t interval = num_ / (FLAGS_thread);
-        size_t start_offset = (thread->tid) * interval;
-        auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
-        // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
-        //         start_offset + interval);
-
-        // how many threads should give to each CCEH
-        uint32_t nthread = FLAGS_thread / FLAGS_ins_num;  // 8
-        Duration duration (FLAGS_readtime, reads_);
-        thread->stats.Start ();
-
-        while (!duration.Done (batch) && key_iterator.Valid ()) {
-            uint64_t j = 0;
-            for (; j < batch && key_iterator.Valid (); j++) {
-                size_t key = key_iterator.Next ();
-
-                uint32_t npolicy = thread->tid / nthread;
-                if (npolicy == 0) {
-                    D_RW (vhashtable_[npolicy])
-                        ->Insert (vpop_[npolicy], key, reinterpret_cast<Value_t> (key));
-                } else if (npolicy == 1) {
-                    D_RW (vhashtable_[npolicy])
-                        ->Insert (vpop_[npolicy], key, reinterpret_cast<Value_t> (key));
-                } else {
-                    perror ("threads distribute error . \n");
-                    exit (1);
-                }
-            }
-            thread->stats.FinishedBatchOp (j);
-        }
-        return;
-    }
-
-    void bufferexchange (ThreadState* thread) {
-        uint64_t batch = FLAGS_batch;
-        if (key_trace_ == nullptr) {
-            perror ("write & hybrid key_trace_ initialization.");
-            return;
-        }
-        if (FLAGS_ins_num <= 1) {
-            perror ("instance must larger than 1 \n");
-            exit (1);
-        }
-
-        size_t interval = num_ / (FLAGS_thread);
-        size_t start_offset = (thread->tid) * interval;
-        auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
-        // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
-        //         start_offset + interval);
-
-        // how many threads should give to each CCEH
-        uint32_t nthread = FLAGS_thread / FLAGS_ins_num;  // 8
-        Duration duration (FLAGS_readtime, reads_);
-        thread->stats.Start ();
-
-        while (!duration.Done (batch) && key_iterator.Valid ()) {
-            uint64_t j = 0;
-            for (; j < batch && key_iterator.Valid (); j++) {
-                size_t key = key_iterator.Next ();
-
-                uint32_t npolicy = thread->tid / nthread;
-                if (npolicy == 0) {
-                    D_RW (hashtable0_)->Insert (pop0_, key, reinterpret_cast<Value_t> (key));
-                } else if (npolicy == 1) {
-                    D_RW (hashtable1_)->Insert (pop1_, key, reinterpret_cast<Value_t> (key));
-                } else {
-                    perror ("threads distribute error . \n");
-                    exit (1);
-                }
-            }
-            thread->stats.FinishedBatchOp (j);
-        }
-
-        return;
-    }
-
 private:
     struct ThreadArg {
         Benchmark* bm;
@@ -1502,9 +1270,6 @@ int main (int argc, char* argv[]) {
         benchmark.Run ();
     } else if (2 == FLAGS_ins_num) {
         Benchmark benchmark (FLAGS_ins_num);
-        benchmark.Run ();
-    } else {
-        Benchmark benchmark (FLAGS_ins_num, FLAGS_ins_num);
         benchmark.Run ();
     }
     return 0;

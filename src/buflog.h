@@ -285,55 +285,37 @@ static_assert (sizeof (DataLogMeta) == 256, "size of LogMeta is not 256 byte");
 class BufferLogNode {
 public:
     BufferLogNode () : log_size_ (0), log_size_mask_ (0), log_start_addr_ (nullptr) {
-        log_cur_tail_.get_rw ().store (256);
+        log_cur_tail_.store (256);
     }
 
-    pmem::obj::persistent_ptr<char[]> log;
-    // char* log;
-
-    bool Create (size_t size) {
-        log = pmem::obj::make_persistent<char[]> (size);
-        // log = (char*)malloc (1024 * 1024);
-
-        if (!isPowerOfTwo (size)) {
-            perror ("Data log is not power of 2.");
-            return false;
-        }
+    bool Create (char* logBaseAddr, size_t size) {
+        // if (!isPowerOfTwo (size)) {
+        //     perror ("Data log is not power of 2.");
+        //     return false;
+        // }
         log_size_ = size;
         log_size_mask_ = size - 1;
-        log_start_addr_ = log.get ();
-        log_cur_tail_.get_rw ().store (256);
+        log_start_addr_ = logBaseAddr;
+        log_cur_tail_.store (256);
 
-        DataLogMeta* meta = reinterpret_cast<DataLogMeta*> (log.get ());
+        DataLogMeta* meta = reinterpret_cast<DataLogMeta*> (log_start_addr_);
         meta->size_ = size;
-        BUFLOG_FLUSH (log.get ());
+        BUFLOG_FLUSH (log_start_addr_);
         BUFLOG_FLUSHFENCE;
         return true;
     }
 
-    void Open () {
-        DataLogMeta* meta = reinterpret_cast<DataLogMeta*> (log.get ());
+    void Open (char* logBaseAddr) {
+        DataLogMeta* meta = reinterpret_cast<DataLogMeta*> (logBaseAddr);
         log_size_ = meta->size_;
         log_size_mask_ = log_size_ - 1;
-        log_start_addr_ = log.get ();
+        log_start_addr_ = logBaseAddr;
         // log_cur_tail_.get_rw ().store (meta->commit_tail_);
-        // printf ("Open\n");
-        // char* start = log_start_addr_ + 256 + 17;
-        // uint64_t test = 256 + 17;
-        // uint64_t k = 0;
-        // while (k < 15) {
-        //     printf ("%hhu ", *(uint8_t*)start);
-        //     uint64_t data = *(uint64_t*)start + 2;
-        //     printf ("test %lu data \n", test, data);
-        //     start = start + 27;
-        //     test += 27;
-        //     k++;
-        // }
     }
 
     void CommitTail (bool is_pmem) {
         DataLogMeta* meta = reinterpret_cast<DataLogMeta*> (log_start_addr_);
-        meta->commit_tail_ = log_cur_tail_.get_rw ().load ();
+        meta->commit_tail_ = log_cur_tail_.load ();
 
         if (is_pmem) {
             BUFLOG_FLUSH (meta);
@@ -341,13 +323,13 @@ public:
         }
     }
 
-    inline uint64_t LogTail (void) { return log_cur_tail_.get_rw (); }
+    inline uint64_t LogTail (void) { return log_cur_tail_; }
     // append fixed 16 byte kv pair
     inline size_t Append (DataLogNodeMetaType type, util::Slice entry, uint64_t next,
                           bool is_pmem) {
         // int total_size = 1 + 16 + sizeof (DataLogNodeMeta);
         int total_size = 1 + 16 + 10;
-        size_t off = log_cur_tail_.get_rw ().fetch_add (total_size, std::memory_order_relaxed);
+        size_t off = log_cur_tail_.fetch_add (total_size, std::memory_order_relaxed);
         char* addr = log_start_addr_ + off;
 
         //  | len | .. data ... |  DataLogNodeMeta |
@@ -374,7 +356,7 @@ public:
                           bool is_pmem) {
         // int total_size = 1 + 16 + sizeof (DataLogNodeMeta);
         int total_size = 1 + 16 + 10;
-        size_t off = log_cur_tail_.get_rw ().fetch_add (total_size, std::memory_order_relaxed);
+        size_t off = log_cur_tail_.fetch_add (total_size, std::memory_order_relaxed);
         char* addr = log_start_addr_ + off;
 
         //  | len | .. data ... |  DataLogNodeMeta |
@@ -560,12 +542,10 @@ public:
 
     SeqIterator Begin (void) { return SeqIterator (256, log_start_addr_); }
 
-    ReverseIterator rBegin (void) {
-        return ReverseIterator (log_cur_tail_.get_rw (), log_start_addr_);
-    }
+    ReverseIterator rBegin (void) { return ReverseIterator (log_cur_tail_, log_start_addr_); }
 
     LinkIterator lBegin () {
-        return LinkIterator (log_cur_tail_.get_rw () - sizeof (DataLogNodeMeta), log_start_addr_);
+        return LinkIterator (log_cur_tail_ - sizeof (DataLogNodeMeta), log_start_addr_);
     }
 
     LinkIterator lBeginRecover (uint64_t offset) { return LinkIterator (offset, log_start_addr_); }
@@ -574,7 +554,7 @@ private:
     size_t log_size_;
     size_t log_size_mask_;
     char* log_start_addr_;
-    pmem::obj::p<std::atomic<size_t>> log_cur_tail_;
+    std::atomic<size_t> log_cur_tail_;
 };
 
 }  // end of namespace linkedredolog
@@ -1010,7 +990,8 @@ public:
     std::vector<SortedBufNode> nodes_;
     AtomicSpinLock lock_;
     size_t local_depth;
-    std::vector<uint64_t> backTraker_;
+    bool isRecovered;
+    bool isRecovering;
 
     WriteBuffer () { local_depth = 0; }
 

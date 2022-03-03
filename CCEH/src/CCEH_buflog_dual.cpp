@@ -260,9 +260,9 @@ void CCEH::initCCEH (PMEMobjpool* pop, size_t initCap, uint32_t bufferNum) {
                 curBufferNum.fetch_add (1, std::memory_order_relaxed);
             } else {
                 bufferConfig.noBufferIndexSet->insert (i);
-                validBufferFlag = true;
+                // validBufferFlag = true;
                 validBuffer.fetch_add (1, std::memory_order_relaxed);
-                printf ("Finish the initialization of the buffer \n");
+                // printf ("Finish the initialization of the buffer \n");
             }
         }
         curSegmentNum.fetch_add (1, std::memory_order_relaxed);
@@ -296,28 +296,30 @@ bool CCEH::increaseBuffer () {
         bufferConfig.IndexSetLock.unlock ();
         return false;
     }
-    // 1. find out a segment to increase its buffer
-    uint32_t randN = rand () % bufferConfig.noBufferIndexSet->size ();
-    std::unordered_set<uint32_t>::iterator itlow = bufferConfig.noBufferIndexSet->begin ();
+    for (int y = 0; y < 50; y++) {
+        // 1. find out a segment to increase its buffer
+        uint32_t randN = rand () % bufferConfig.noBufferIndexSet->size ();
+        std::unordered_set<uint32_t>::iterator itlow = bufferConfig.noBufferIndexSet->begin ();
 
-    advance (itlow, randN);
-    auto target = D_RO (D_RO (dir)->segment)[*itlow];
-    auto target_ptr = D_RW (target);
+        advance (itlow, randN);
+        auto target = D_RO (D_RO (dir)->segment)[*itlow];
+        auto target_ptr = D_RW (target);
 
-    // 2. merge the buffer to segment
-    if (target_ptr && D_RO (dir)->intermediates[*itlow]->bufnode == nullptr) {
-        D_RO (dir)->intermediates[*itlow]->bufnode =
-            new WriteBuffer (target_ptr->local_depth, 32 * (1 + 0.3));
+        // 2. merge the buffer to segment
+        if (D_RO (dir)->intermediates[*itlow]->bufnode == nullptr) {
+            D_RO (dir)->intermediates[*itlow]->bufnode =
+                new WriteBuffer (target_ptr->local_depth, 32 * (1 + 0.3));
 
-        balance.fetch_add (1);
-        curBufferNum.fetch_add (1);
-        if (itlow == bufferConfig.noBufferIndexSet->end ()) {
-            printf ("false!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-            exit (1);
+            // balance.fetch_add (1);
+            curBufferNum.fetch_add (1);
+            if (itlow == bufferConfig.noBufferIndexSet->end ()) {
+                printf ("false!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+                exit (1);
+            }
+            bufferConfig.noBufferIndexSet->erase (*itlow);
+        } else {
+            validBuffer.fetch_add (1, std::memory_order_relaxed);
         }
-        bufferConfig.noBufferIndexSet->erase (*itlow);
-    } else {
-        validBuffer.fetch_add (1, std::memory_order_relaxed);
     }
     bufferConfig.IndexSetLock.unlock ();
     return true;
@@ -347,7 +349,11 @@ retry:
         return isMinorCompaction;
     }
     // printf("Insert bufnode lock \n");
+    auto temp_ptr = intermediate->bufnode;
     intermediate->bufnode->Lock ();
+    if (temp_ptr != intermediate->bufnode) {
+        goto retry;
+    }
 
     if (D_RO (target)->local_depth != intermediate->bufnode->local_depth) {
         intermediate->bufnode->Unlock ();
@@ -765,7 +771,7 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool* pop, WriteBuffer* bufnode, S
         WriteBuffer* new_segment_bufnode = nullptr;
         intermediate* new_segment_bufnode_med =
             (intermediate*)malloc (sizeof (struct intermediate));
-        new_segment_bufnode_med = nullptr;
+        new_segment_bufnode_med->bufnode = nullptr;
 
         // After segment split
         // update new_segment_bufnode local depth
@@ -1031,14 +1037,14 @@ RETRY:
         goto RETRY;
     }
 
-    char* val;
-    WriteBuffer* bptr = D_RW (dir)->intermediates[x]->bufnode;
-    if (bptr) {
-        auto res = D_RW (dir)->intermediates[x]->bufnode->Get (key, val);
-        if (res) {
-            return Value_t (val);
-        }
-    }
+    // char* val;
+    // WriteBuffer* bptr = D_RW (dir)->intermediates[x]->bufnode;
+    // if (bptr) {
+    //     auto res = D_RW (dir)->intermediates[x]->bufnode->Get (key, val);
+    //     if (res) {
+    //         return Value_t (val);
+    //     }
+    // }
     return get (key);
 }
 
@@ -1152,6 +1158,91 @@ void CCEH::transferBuffer () {
     }
     bufferConfig.IndexSetLock.unlock ();
     D_RW (dir)->unlock ();
+}
+
+void CCEH::forceReleaseAllBuffers (PMEMobjpool* pop, TOID (CCEH) other) {
+    // bufferConfig.IndexSetLock.lock ();
+    // Scan the new directory and construct a new bufferContainFlag
+    for (int i = 0; i < D_RO (dir)->capacity;) {
+    RR:
+        auto temp_bufnode = D_RW (dir)->intermediates[i]->bufnode;
+        if (temp_bufnode != nullptr) {
+            temp_bufnode->Lock ();
+            if (D_RW (dir)->intermediates[i]->bufnode != temp_bufnode) goto RR;
+            auto target = D_RO (D_RO (dir)->segment)[i];
+            int counter = 0;
+            for (auto k = 0; k < temp_bufnode->kNodeNum; k++) {
+                counter += temp_bufnode->nodes_[k].ValidCount ();
+            }
+            if (counter > 32 * 13 * 0.7)
+                // mergeBufAndSplitWhenNeeded (pop, D_RW (dir)->intermediates[i]->bufnode, target,
+                // 0);
+
+                D_RW (dir)->intermediates[i]->bufnode = nullptr;
+            temp_bufnode->Unlock ();
+
+            curBufferNum.fetch_sub (1);
+            bufferConfig.noBufferIndexSet->insert (i);
+            validBuffer.fetch_add (1, std::memory_order_relaxed);
+            if (curBufferNum.load () == 0) break;
+        }
+
+        auto tar = D_RO (D_RO (dir)->segment)[i];
+
+        int stride = pow (2, D_RO (dir)->depth - D_RO (tar)->local_depth);
+        i += stride;
+    }
+    // bufferConfig.IndexSetLock.unlock ();
+    // D_RW (other)->acceptAllBuffers ();
+}
+
+void CCEH::flushAllBuffers (PMEMobjpool* pop) {
+    // bufferConfig.IndexSetLock.lock ();
+    // Scan the new directory and construct a new bufferContainFlag
+    for (int i = 0; i < D_RO (dir)->capacity;) {
+        if (D_RW (dir)->intermediates[i]->bufnode != nullptr) {
+            auto temp_bufnode = D_RW (dir)->intermediates[i]->bufnode;
+
+            D_RW (dir)->intermediates[i]->bufnode->Lock ();
+            auto target = D_RO (D_RO (dir)->segment)[i];
+            int counter = 0;
+            for (auto k = 0; k < temp_bufnode->kNodeNum; k++) {
+                counter += temp_bufnode->nodes_[k].ValidCount ();
+            }
+            if (counter > 32 * 13 * 0.7)
+                // mergeBufAndSplitWhenNeeded (pop, D_RW (dir)->intermediates[i]->bufnode, target,
+                // 0);
+
+                temp_bufnode->Unlock ();
+        }
+
+        auto tar = D_RO (D_RO (dir)->segment)[i];
+
+        int stride = pow (2, D_RO (dir)->depth - D_RO (tar)->local_depth);
+        i += stride;
+    }
+    // bufferConfig.IndexSetLock.unlock ();
+    // D_RW (other)->acceptAllBuffers ();
+}
+
+void CCEH::acceptAllBuffers () {
+    int i = 0;
+    while (1) {
+        if (i >= D_RO (dir)->capacity) break;
+        if (validBuffer.load () > 0) {
+            auto tar = D_RO (D_RO (dir)->segment)[i];
+            int stride = pow (2, D_RO (dir)->depth - D_RO (tar)->local_depth);
+            auto ptr = D_RW (dir)->intermediates[i]->bufnode;
+            if (ptr == nullptr) {
+                D_RW (dir)->intermediates[i]->bufnode =
+                    new WriteBuffer (D_RO (tar)->local_depth, 32 * (1 + 0.3));
+                // bufferConfig.noBufferIndexSet->erase (i);
+                curBufferNum.fetch_add (1, std::memory_order_relaxed);
+                validBuffer.fetch_sub (1, std::memory_order_relaxed);
+            }
+            i += stride;
+        }
+    }
 }
 
 double CCEH::Utilization (void) {
