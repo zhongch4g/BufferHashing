@@ -432,7 +432,7 @@ public:
         remove (FLAGS_filepath.c_str ());  // delete the mapped file.
         pop_ = pmemobj_create (FLAGS_filepath.c_str (), "CCEH", POOL_SIZE, 0666);
         if (!pop_) {
-            perror ("pmemoj_create");
+            perror ("pmemobj_create");
             exit (1);
         }
 

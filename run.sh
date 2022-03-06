@@ -48,8 +48,6 @@ done
 # sudo numactl -N 0 ./cceh_bench --thread=16 --benchmarks=recovery --recovery=true --report_interval=1 --batch=10000
 
 # Combine the limit buffer 
-
-
 ########################################### CCEH-BUFLOG ##########################################
 
 ######################################## CCEH-BUFLOG-LIMIT #######################################

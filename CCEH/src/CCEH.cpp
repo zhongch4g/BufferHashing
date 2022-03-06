@@ -194,6 +194,7 @@ void CCEH::initCCEH (PMEMobjpool* pop, size_t initCap) {
         POBJ_ALLOC (pop, &D_RO (D_RO (dir)->segment)[i], struct Segment, sizeof (struct Segment),
                     NULL, NULL);
         D_RW (D_RW (D_RW (dir)->segment)[i])->initSegment (static_cast<size_t> (log2 (initCap)));
+        curSegmentNum.fetch_add (1, std::memory_order_relaxed);
     }
 }
 
@@ -319,6 +320,7 @@ RETRY:
 #endif
 
     TOID (struct Segment)* s = D_RW (target)->Split (pop);
+    curSegmentNum.fetch_add (1, std::memory_order_relaxed);
 DIR_RETRY:
     /* need to double the directory */
     if (D_RO (target)->local_depth == D_RO (dir)->depth) {

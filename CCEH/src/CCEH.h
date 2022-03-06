@@ -3,11 +3,14 @@
 
 #include <libpmemobj.h>
 #include <pthread.h>
+
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <vector>
+
 #include "src/util.h"
 
 #define TOID_ARRAY(x) TOID (x)
@@ -158,7 +161,7 @@ struct Directory {
     }
 
     void initDirectory (size_t _depth) {
-        printf("directory depth = %lu\n", _depth);
+        printf ("directory depth = %lu\n", _depth);
         depth = _depth;
         capacity = pow (2, _depth);
         sema = 0;
@@ -184,6 +187,7 @@ public:
     void Recovery (PMEMobjpool*);
 
     bool crashed = true;
+    std::atomic<size_t> curSegmentNum;
 
 private:
     TOID (struct Directory) dir;
