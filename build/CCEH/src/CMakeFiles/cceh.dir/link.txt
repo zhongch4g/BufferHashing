@@ -1,2 +1,0 @@
-/usr/bin/ar qc libcceh.a  CMakeFiles/cceh.dir/CCEH_buflog.cpp.o CMakeFiles/cceh.dir/CCEH_buflog_limit.cpp.o CMakeFiles/cceh.dir/CCEH_buflog_dual.cpp.o CMakeFiles/cceh.dir/trace.cc.o
-/usr/bin/ranlib libcceh.a
