@@ -8,10 +8,11 @@
             "name": "C/C++: clang++ Build and debug active file",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/debug/cceh_dual_bench",
+            "program": "${workspaceFolder}/release/cceh_bench",
             "args": [
-                "--thread=16", "--benchmarks=ccehdual2_mixed", "--num=120000000", "--report_interval=0.5", "--batch=10000", "--ins_num=2", "--bufferNum=70000", "--bufferNum0=70000", "--bufferNum1=70000", "--gChoice=0" ,"--initsize=256"
+                "--thread=4", "--benchmarks=load,readall", "--num=120000000"
             ],
+            "sudo": true,
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
             "environment": [],

@@ -1210,10 +1210,9 @@ void CCEH::flushAllBuffers (PMEMobjpool* pop) {
                 counter += temp_bufnode->nodes_[k].ValidCount ();
             }
             if (counter > 32 * 13 * 0.7)
-                // mergeBufAndSplitWhenNeeded (pop, D_RW (dir)->intermediates[i]->bufnode, target,
-                // 0);
+                mergeBufAndSplitWhenNeeded (pop, D_RW (dir)->intermediates[i]->bufnode, target, 0);
 
-                temp_bufnode->Unlock ();
+            temp_bufnode->Unlock ();
         }
 
         auto tar = D_RO (D_RO (dir)->segment)[i];

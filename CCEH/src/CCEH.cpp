@@ -190,11 +190,17 @@ void CCEH::initCCEH (PMEMobjpool* pop, size_t initCap) {
     POBJ_ALLOC (pop, &D_RW (dir)->segment, TOID (struct Segment),
                 sizeof (TOID (struct Segment)) * D_RO (dir)->capacity, NULL, NULL);
 
+    // Create and initial the in-DRAM buffer
+    D_RW (dir)->shadow =
+        reinterpret_cast<Shadow**> (malloc (sizeof (Shadow*) * D_RO (dir)->capacity));
+
     for (int i = 0; i < D_RO (dir)->capacity; ++i) {
         POBJ_ALLOC (pop, &D_RO (D_RO (dir)->segment)[i], struct Segment, sizeof (struct Segment),
                     NULL, NULL);
         D_RW (D_RW (D_RW (dir)->segment)[i])->initSegment (static_cast<size_t> (log2 (initCap)));
         curSegmentNum.fetch_add (1, std::memory_order_relaxed);
+        D_RW (dir)->shadow[i] = (Shadow*)malloc (sizeof (struct Shadow));
+        D_RW (dir)->shadow[i]->writes = 0;
     }
 }
 
@@ -207,6 +213,9 @@ void CCEH::Insert (PMEMobjpool* pop, Key_t& key, Value_t value) {
 RETRY:
     auto x = (f_hash >> (8 * sizeof (f_hash) - D_RO (dir)->depth));  // MSB
     auto target = D_RO (D_RO (dir)->segment)[x];                     // the target segment (how to?)
+
+    // add the writes for this directory entry
+    D_RW (dir)->shadow[x]->writes++;
 
     if (!D_RO (target)) {
         std::this_thread::yield ();
@@ -320,6 +329,12 @@ RETRY:
 #endif
 
     TOID (struct Segment)* s = D_RW (target)->Split (pop);
+
+    Shadow* split_segment_shadow = (Shadow*)malloc (sizeof (struct Shadow));
+    split_segment_shadow->writes = 0;
+    Shadow* segment_shadow = D_RW (dir)->shadow[x];
+    segment_shadow->writes = 0;
+
     curSegmentNum.fetch_add (1, std::memory_order_relaxed);
 DIR_RETRY:
     /* need to double the directory */
@@ -338,13 +353,20 @@ DIR_RETRY:
                     sizeof (TOID (struct Segment)) * D_RO (dir)->capacity * 2, NULL, NULL);
         D_RW (_dir)->initDirectory (D_RO (dir)->depth + 1);
 
+        D_RW (_dir)->shadow =
+            reinterpret_cast<Shadow**> (malloc (sizeof (Shadow*) * D_RO (dir)->capacity * 2));
+
         for (int i = 0; i < D_RO (dir)->capacity; ++i) {
             if (i == x) {
                 D_RW (D_RW (_dir)->segment)[2 * i] = s[0];
                 D_RW (D_RW (_dir)->segment)[2 * i + 1] = s[1];
+                D_RW (_dir)->shadow[2 * i] = segment_shadow;
+                D_RW (_dir)->shadow[2 * i + 1] = split_segment_shadow;
             } else {
                 D_RW (D_RW (_dir)->segment)[2 * i] = D_RO (d)[i];
                 D_RW (D_RW (_dir)->segment)[2 * i + 1] = D_RO (d)[i];
+                D_RW (_dir)->shadow[2 * i] = D_RO (dir)->shadow[i];
+                D_RW (_dir)->shadow[2 * i + 1] = D_RO (dir)->shadow[i];
             }
         }
 
@@ -378,6 +400,9 @@ DIR_RETRY:
                 D_RW (D_RW (dir)->segment)[x] = s[0];
                 pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[x],
                                  sizeof (TOID (struct Segment)) * 2);
+
+                D_RW (dir)->shadow[x] = segment_shadow;
+                D_RW (dir)->shadow[x + 1] = split_segment_shadow;
 #endif
             } else {
                 D_RW (D_RW (dir)->segment)[x] = s[1];
@@ -389,6 +414,9 @@ DIR_RETRY:
                 D_RW (D_RW (dir)->segment)[x - 1] = s[0];
                 pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[x - 1],
                                  sizeof (TOID (struct Segment)) * 2);
+
+                D_RW (dir)->shadow[x] = split_segment_shadow;
+                D_RW (dir)->shadow[x - 1] = segment_shadow;
 #endif
             }
             D_RW (dir)->unlock ();
@@ -404,6 +432,7 @@ DIR_RETRY:
             auto loc = x - (x % stride);
             for (int i = 0; i < stride / 2; ++i) {
                 D_RW (D_RW (dir)->segment)[loc + stride / 2 + i] = s[1];
+                D_RW (dir)->shadow[loc + stride / 2 + i] = split_segment_shadow;
             }
 #ifdef INPLACE
             pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[loc + stride / 2],
@@ -411,6 +440,7 @@ DIR_RETRY:
 #else
             for (int i = 0; i < stride / 2; ++i) {
                 D_RW (D_RW (dir)->segment)[loc + i] = s[0];
+                D_RW (dir)->shadow[loc + i] = segment_shadow;
             }
             pmemobj_persist (pop, (char*)&D_RO (D_RO (dir)->segment)[loc],
                              sizeof (TOID (struct Segment)) * stride);
@@ -567,4 +597,23 @@ Value_t CCEH::FindAnyway (Key_t& key) {
         }
     }
     return NONE;
+}
+
+void CCEH::ScanShadow (uint64_t ops) {
+    std::string ops_str = std::to_string (ops);
+    std::string seg_wr = "./discover_cceh/segment_write_rate_" + ops_str + ".txt";
+    std::string cmd = "rm " + seg_wr;
+    system (cmd.c_str ());
+    FILE* wr = fopen ((seg_wr).c_str (), "a");
+
+    size_t cnt = 0;
+    for (int i = 0; i < D_RO (dir)->capacity; cnt++) {
+        auto target = D_RO (D_RO (dir)->segment)[i];
+        int stride = pow (2, D_RO (dir)->depth - D_RO (target)->local_depth);
+
+        fprintf (wr, "%lu \n", D_RO (dir)->shadow[i]->writes);
+        D_RO (dir)->shadow[i]->writes = 0;
+        i += stride;
+    }
+    // return cnt * Segment::kNumSlot;
 }

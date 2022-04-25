@@ -35,7 +35,7 @@ DEFINE_uint32 (batch, 1000000, "report batch");
 DEFINE_uint32 (readtime, 0, "if 0, then we read all keys");
 DEFINE_uint32 (thread, 1, "");
 DEFINE_uint64 (report_interval, 0, "Report interval in seconds");
-DEFINE_uint64 (stats_interval, 10000000, "Report interval in ops");
+DEFINE_uint64 (stats_interval, 1000000, "Report interval in ops");
 DEFINE_uint64 (value_size, 8, "The value size");
 DEFINE_uint64 (num, 1 * 1000000LU, "Number of total record");
 DEFINE_uint64 (read, 0, "Number of read operations");
@@ -115,7 +115,7 @@ public:
         //     (now - start_) / 1000000.0);
 
         // each epoch speed
-        printf ("TIME|%d,%lu,%lu,%.4f,%.4f\n", tid_, last_report_done_, done_,
+        printf ("[TIME]%d,%lu,%lu,%.4f,%.4f\n", tid_, last_report_done_, done_,
                 usecs_since_last / 1000000.0, (now - start_) / 1000000.0);
         last_report_finish_ = now;
         last_report_done_ = done_;
@@ -154,7 +154,7 @@ public:
             fprintf (stderr, "... finished %llu ops%30s\r", (unsigned long long)done_, "");
 
             if (FLAGS_report_interval == 0 && (done_ % FLAGS_stats_interval) == 0) {
-                PrintSpeed ();
+                // PrintSpeed ();
                 return true;
             }
             fflush (stderr);
@@ -163,7 +163,7 @@ public:
 
         if (FLAGS_report_interval && NowMicros () > next_report_time_) {
             next_report_time_ += FLAGS_report_interval * 1000000;
-            PrintSpeed ();
+            // PrintSpeed ();
             return false;
         }
         return true;
@@ -192,7 +192,7 @@ public:
             fprintf (stderr, "... finished %llu ops%30s\r", (unsigned long long)done_, "");
 
             if (FLAGS_report_interval == 0 && (done_ % FLAGS_stats_interval) == 0) {
-                PrintSpeed ();
+                // PrintSpeed ();
                 return;
             }
             fflush (stderr);
@@ -201,7 +201,7 @@ public:
 
         if (FLAGS_report_interval != 0 && NowNanos () > next_report_time_) {
             next_report_time_ += FLAGS_report_interval * 1000000;
-            PrintSpeed ();
+            // PrintSpeed ();
         }
     }
 
@@ -230,14 +230,15 @@ public:
 
         double elapsed = (finish_ - start_) * 1e-6;
 
-        // double throughput = (double)done_ / elapsed;
+        double throughput = (double)done_ / elapsed;
 
         // The throughput data for none buffer cceh
         // printf ("%-12s : %11.3f micros/op %lf Mops/s;%s%s\n", name.ToString ().c_str (),
         //         elapsed * 1e6 / done_, throughput / 1024 / 1024, (extra.empty () ? "" : " "),
         //         extra.c_str ());
 
-        printf ("%llu operations, %2.2f real_elapsed \n", done_, elapsed);
+        printf ("*operations* %lu\n*real_elapsed* %2.2f\n*throughput* %2.2f\n", done_, elapsed,
+                throughput / 1024 / 1024);
 
         if (print_hist) {
             fprintf (stdout, "Nanoseconds per op:\n%s\n", hist_.ToString ().c_str ());
@@ -263,7 +264,7 @@ struct SharedState {
     int num_initialized;
     int num_done;
     bool start;
-    int middle_step_done;
+    std::atomic<uint64_t> middle_step_done;
     SharedState (int total)
         : total (total), num_initialized (0), num_done (0), start (false), middle_step_done (0) {}
 };
@@ -348,7 +349,7 @@ static std::string TrimSpace (std::string s) {
 
 }  // namespace
 
-#define POOL_SIZE (1073741824L * 64L)  // 100GB
+#define POOL_SIZE (1073741824L * 100L)  // 100GB
 class Benchmark {
 public:
     uint64_t num_;
@@ -359,13 +360,17 @@ public:
     size_t trace_size_;
     PMEMobjpool* pop_;
     TOID (CCEH) hashtable_;
+    std::atomic<uint64_t> thread_counter;
+    uint64_t batch_counter;
     Benchmark ()
         : num_ (FLAGS_num),
           value_size_ (FLAGS_value_size),
           reads_ (FLAGS_read),
           writes_ (FLAGS_write),
           key_trace_ (nullptr),
-          hashtable_ (OID_NULL) {
+          hashtable_ (OID_NULL),
+          thread_counter (0),
+          batch_counter (0) {
         remove (FLAGS_filepath.c_str ());  // delete the mapped file.
         pop_ = pmemobj_create (FLAGS_filepath.c_str (), "CCEH", POOL_SIZE, 0666);
         if (!pop_) {
@@ -664,20 +669,55 @@ public:
         size_t interval = num_ / FLAGS_thread;
         size_t start_offset = thread->tid * interval;
         auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
-        // printf("thread %2d, between %lu - %lu\n", thread->tid, start_offset, start_offset +
-        // interval);
+        printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+                start_offset + interval);
         thread->stats.Start ();
         std::string val (value_size_, 'v');
         while (key_iterator.Valid ()) {
+            batch_counter++;
             uint64_t j = 0;
             for (; j < batch && key_iterator.Valid (); j++) {
                 size_t ikey = key_iterator.Next ();
                 D_RW (hashtable_)->Insert (pop_, ikey, reinterpret_cast<Value_t> (ikey));
             }
-            thread->stats.FinishedBatchOp (j);
+            bool res = thread->stats.FinishedBatchOp (j);
+            // if (!res) {
+            //     // time epoch
+            //     std::unique_lock<std::mutex> lck (thread->shared->mu);
+            //     thread->shared->middle_step_done.fetch_add (1, std::memory_order_relaxed);
+            //     if (thread->shared->middle_step_done.load () >= thread->shared->total) {
+            //         printf ("[#segments]%lu\n", D_RW (hashtable_)->curSegmentNum.load ());
+            //         // D_RW (hashtable_)
+            //         //     ->ScanShadow (FLAGS_thread * batch *
+            //         //                   batch_counter);  // Check each segments writes
+            //         thread_counter.fetch_add (1, std::memory_order_relaxed);
+            //         thread->shared->cv.notify_all ();
+            //         thread_counter.store (0);
+            //         thread->shared->middle_step_done.store (0);
+            //     }
+            //     while (thread_counter.load () >= thread->shared->total) {
+            //         thread->shared->cv.wait (lck);
+            //     }
+            // }
+
+            // std::unique_lock<std::mutex> lck (thread->shared->mu);
+            // thread->shared->middle_step_done.fetch_add (1, std::memory_order_relaxed);
+            // if (thread->shared->middle_step_done.load () >= thread->shared->total) {
+            //     printf ("[#segments]%lu\n", D_RW (hashtable_)->curSegmentNum.load ());
+            //     // D_RW (hashtable_)
+            //     //     ->ScanShadow (FLAGS_thread * batch *
+            //     //                   batch_counter);  // Check each segments writes
+            //     thread_counter.fetch_add (1, std::memory_order_relaxed);
+            //     thread->shared->cv.notify_all ();
+            //     thread_counter.store (0);
+            //     thread->shared->middle_step_done.store (0);
+            // }
+            // while (thread_counter.load () >= thread->shared->total) {
+            //     thread->shared->cv.wait (lck);
+            // }
         }
+
         D_RW (hashtable_)->Capacity ();
-    write_end:
         return;
     }
 

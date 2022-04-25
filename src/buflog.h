@@ -404,9 +404,9 @@ public:
 
         inline uint8_t status () { return *(uint8_t*)(log_addr_ + front_off_); }
 
-        inline uint8_t operator* () const { return this->operator-> (); }
+        inline uint8_t operator* () const { return this->operator->(); }
 
-        inline uint8_t operator-> (void) const {
+        inline uint8_t operator->(void) const {
             return *(uint8_t*)(log_addr_ + front_off_ + 1 + 16);
         }
 
@@ -444,9 +444,9 @@ public:
             return end_off_ > 256;  // should be larger than the DataLogMeta
         }
 
-        inline DataLogNodeMeta operator* () const { return *this->operator-> (); }
+        inline DataLogNodeMeta operator* () const { return *this->operator->(); }
 
-        inline DataLogNodeMeta* operator-> (void) const {
+        inline DataLogNodeMeta* operator->(void) const {
             DataLogNodeMeta* node_meta = reinterpret_cast<DataLogNodeMeta*> (
                 log_addr_ + end_off_ - sizeof (DataLogNodeMeta));
             return node_meta;
@@ -831,7 +831,7 @@ public:
 
         KV& operator* () const { return node_->kvs_[node_->seqs_[i_]]; }
 
-        KV* operator-> () const { return &node_->kvs_[node_->seqs_[i_]]; }
+        KV* operator->() const { return &node_->kvs_[node_->seqs_[i_]]; }
 
         // Prefix ++ overload
         inline IteratorSorted& operator++ () {
@@ -862,7 +862,7 @@ public:
 
         KV& operator* () const { return node_->kvs_[*bitset_]; }
 
-        KV* operator-> () const { return &node_->kvs_[*bitset_]; }
+        KV* operator->() const { return &node_->kvs_[*bitset_]; }
 
         // Prefix ++ overload
         inline Iterator& operator++ () {
@@ -992,6 +992,8 @@ public:
     size_t local_depth;
     bool isRecovered;
     bool isRecovering;
+    bool readByPass;
+    LogPtr logPtr;
 
     WriteBuffer () { local_depth = 0; }
 
@@ -999,6 +1001,7 @@ public:
         local_depth = d;
         kNodeNum = num;
         kProbeLen = num / 2 - 1;
+        readByPass = true;
     }
 
     inline bool Put (int64_t key, char* val) {
@@ -1162,7 +1165,7 @@ public:
 
         inline bool Valid (void) { return iter.Valid () || cur_ < wb_->kNodeNum; }
         KV& operator* () const { return *iter; }
-        KV* operator-> () const { return &(*iter); }
+        KV* operator->() const { return &(*iter); }
 
         // Prefix ++ overload
         inline Iterator& operator++ () {

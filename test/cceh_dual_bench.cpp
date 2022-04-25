@@ -165,7 +165,7 @@ public:
             fprintf (stderr, "... finished %llu ops%30s\r", (unsigned long long)done_, "");
 
             if (FLAGS_report_interval == 0 && (done_ % FLAGS_stats_interval) == 0) {
-                PrintSpeed ();
+                // PrintSpeed ();
                 return true;
             }
             fflush (stderr);
@@ -174,7 +174,7 @@ public:
 
         if (FLAGS_report_interval && NowMicros () > next_report_time_) {
             next_report_time_ += FLAGS_report_interval * 1000000;
-            PrintSpeed ();
+            // PrintSpeed ();
             return false;
         }
         return true;
@@ -203,7 +203,7 @@ public:
             fprintf (stderr, "... finished %llu ops%30s\r", (unsigned long long)done_, "");
 
             if (FLAGS_report_interval == 0 && (done_ % FLAGS_stats_interval) == 0) {
-                PrintSpeed ();
+                // PrintSpeed ();
                 return;
             }
             fflush (stderr);
@@ -212,7 +212,7 @@ public:
 
         if (FLAGS_report_interval != 0 && NowNanos () > next_report_time_) {
             next_report_time_ += FLAGS_report_interval * 1000000;
-            PrintSpeed ();
+            // PrintSpeed ();
         }
     }
 
@@ -248,8 +248,8 @@ public:
         //         elapsed * 1e6 / done_, throughput / 1024 / 1024, (extra.empty () ? "" : " "),
         //         extra.c_str ());
 
-        printf ("%-12s %llu operations, %2.2f real_elapsed , %2.2f Mops/s\n",
-                name.ToString ().c_str (), done_, elapsed, throughput / 1024 / 1024);
+        printf ("*operations* %llu\n*real_elapsed* %2.2f\n*throughput* %2.2f\n", done_, elapsed,
+                throughput / 1024 / 1024);
 
         if (print_hist) {
             fprintf (stdout, "Nanoseconds per op:\n%s\n", hist_.ToString ().c_str ());
@@ -682,8 +682,8 @@ public:
         size_t interval = num_ / FLAGS_thread;
         size_t start_offset = thread->tid * interval;
         auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
-        printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
-                start_offset + interval);
+        // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+        //         start_offset + interval);
 
         size_t not_find = 0;
 
@@ -867,8 +867,8 @@ public:
         if (thread->tid < nthread) {
             auto key_iterator0 =
                 key_trace_->iterate_between (start_offset, start_offset + interval);
-            printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
-                    start_offset + interval);
+            // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+            //         start_offset + interval);
             thread->stats.Start ();
             while (key_iterator0.Valid ()) {
                 uint64_t j = 0;
@@ -881,8 +881,8 @@ public:
         } else {
             auto key_iterator1 =
                 key_trace1_->iterate_between (start_offset, start_offset + interval);
-            printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
-                    start_offset + interval);
+            // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+            //         start_offset + interval);
             thread->stats.Start ();
 
             while (key_iterator1.Valid ()) {
@@ -915,8 +915,8 @@ public:
         } else {  // 1
             key_iterator = key_trace1_->iterate_between (start_offset, start_offset + interval);
         }
-        printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
-                start_offset + interval);
+        // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+        //         start_offset + interval);
 
         thread->stats.Start ();
         Duration duration (FLAGS_readtime, reads_);
@@ -1067,8 +1067,8 @@ public:
         } else {  // 1
             key_iterator = key_trace1_->iterate_between (start_offset, start_offset + interval);
         }
-        printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
-                start_offset + interval);
+        // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+        //         start_offset + interval);
 
         thread->stats.Start ();
         Duration duration (FLAGS_readtime, reads_);
@@ -1174,8 +1174,8 @@ public:
         } else {  // 1
             key_iterator = key_trace1_->iterate_between (start_offset, start_offset + interval);
         }
-        printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
-                start_offset + interval);
+        // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+        //         start_offset + interval);
 
         thread->stats.Start ();
         Duration duration (FLAGS_readtime, reads_);
@@ -1257,8 +1257,8 @@ public:
         size_t interval = num_ / FLAGS_thread;
         size_t start_offset = thread->tid * interval;
         auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
-        printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
-                start_offset + interval);
+        // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+        //         start_offset + interval);
         thread->stats.Start ();
         while (key_iterator.Valid ()) {
             size_t ikey = key_iterator.Next ();
@@ -1280,8 +1280,8 @@ public:
         size_t interval = num_ / FLAGS_thread;
         size_t start_offset = thread->tid * interval;
         auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
-        printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
-                start_offset + interval);
+        // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+        //         start_offset + interval);
         size_t inserted = 0;
         thread->stats.Start ();
         while (key_iterator.Valid ()) {
@@ -1306,8 +1306,8 @@ public:
         size_t interval = num_ / FLAGS_thread;
         size_t start_offset = thread->tid * interval;
         auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
-        printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
-                start_offset + interval);
+        // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+        //         start_offset + interval);
         thread->stats.Start ();
         std::string val (value_size_, 'v');
         while (key_iterator.Valid ()) {
@@ -1332,8 +1332,8 @@ public:
         size_t interval = num_ / FLAGS_thread;
         size_t start_offset = thread->tid * interval;
         auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
-        printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
-                start_offset + interval);
+        // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+        //         start_offset + interval);
         thread->stats.Start ();
 
         while (key_iterator.Valid ()) {
@@ -1367,8 +1367,8 @@ public:
         size_t interval = num_ / FLAGS_thread;
         size_t start_offset = thread->tid * interval;
         auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
-        printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
-                start_offset + interval);
+        // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+        //         start_offset + interval);
         thread->stats.Start ();
 
         while (key_iterator.Valid ()) {
@@ -1402,8 +1402,8 @@ public:
         size_t interval = num_ / FLAGS_thread;
         size_t start_offset = thread->tid * interval;
         auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
-        printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
-                start_offset + interval);
+        // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+        //         start_offset + interval);
         thread->stats.Start ();
 
         while (key_iterator.Valid ()) {
@@ -1436,8 +1436,8 @@ public:
         // Read the latest 20%
         auto key_iterator =
             key_trace_->iterate_between (start_offset + 0.8 * interval, start_offset + interval);
-        printf ("thread %2d, between %lu - %lu\n", thread->tid,
-                (size_t)(start_offset + 0.8 * interval), start_offset + interval);
+        // printf ("thread %2d, between %lu - %lu\n", thread->tid,
+        //         (size_t)(start_offset + 0.8 * interval), start_offset + interval);
         thread->stats.Start ();
 
         while (key_iterator.Valid ()) {
@@ -1468,8 +1468,8 @@ public:
         size_t interval = num_ / FLAGS_thread;
         size_t start_offset = thread->tid * interval;
         auto key_iterator = key_trace_->iterate_between (start_offset, start_offset + interval);
-        printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
-                start_offset + interval);
+        // printf ("thread %2d, between %lu - %lu\n", thread->tid, start_offset,
+        //         start_offset + interval);
         thread->stats.Start ();
 
         while (key_iterator.Valid ()) {

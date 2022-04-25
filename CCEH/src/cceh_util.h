@@ -208,11 +208,7 @@ public:
             "User-W: %7.1f MB/s. Time: %6.2fs\n",
             media_read_size_MB / seconds, imc_read_size_MB / seconds, media_write_size_MB / seconds,
             imc_write_size_MB / seconds, seconds);
-        printf (
-            "*SUMSUM* | DIMM-R: %7.1f MB| User-R: %7.1f MB   | DIMM-W: %7.1f "
-            "MB | "
-            "User-W: %7.1f MB | Time: %6.2fs\n",
-            media_read_size_MB, imc_read_size_MB, media_write_size_MB, imc_write_size_MB, seconds);
+        printf ("*DIMM-R* %7.1fMB\n*DIMM-W* %7.1fMB\n", media_read_size_MB, media_write_size_MB);
 
         delete start;
         delete end;
@@ -228,7 +224,7 @@ class Slice {
 public:
     using type = Slice;
     // operator <
-    bool operator< (const Slice& b) const { return compare (b) < 0; }
+    bool operator<(const Slice& b) const { return compare (b) < 0; }
 
     bool operator> (const Slice& b) const { return compare (b) > 0; }
 
@@ -460,32 +456,32 @@ public:
         // ycsbb: 5% reads, 95% writes
         // 51/1024 = 0.0498
         uint32_t rnd_num = wyhash32 ();
-        int32_t partial = NULL;
+        // int32_t partial = NULL;
 
-        switch (choice) {
-            case 0:
-                partial = 0;
-                break;
-            case 1:
-                partial = 205;
-                break;
-            case 2:
-                partial = 409;
-                break;
-            case 3:
-                partial = 614;
-                break;
-            case 4:
-                partial = 818;
-                break;
-            case 5:
-                partial = 1024;
-                break;
-            default:
-                break;
-        }
+        // switch (choice) {
+        //     case 0:
+        //         partial = 0;
+        //         break;
+        //     case 1:
+        //         partial = 205;
+        //         break;
+        //     case 2:
+        //         partial = 409;
+        //         break;
+        //     case 3:
+        //         partial = 614;
+        //         break;
+        //     case 4:
+        //         partial = 818;
+        //         break;
+        //     case 5:
+        //         partial = 1024;
+        //         break;
+        //     default:
+        //         break;
+        // }
 
-        if ((rnd_num & 1023) < partial) {
+        if ((rnd_num & 1023) < 1024) {
             return kYCSB_Read;
         } else {
             return kYCSB_Write;
@@ -518,7 +514,7 @@ public:
         // ycsbb: 5% reads, 95% writes
         // 51/1024 = 0.0498
         uint32_t rnd_num = wyhash32 ();
-        int32_t partial = NULL;
+        // int32_t partial = NULL;
 
         if ((rnd_num & 1023) < 409) {
             return kYCSB_Read;

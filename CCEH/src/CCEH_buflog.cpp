@@ -4,6 +4,7 @@
 
 #include <bitset>
 #include <cassert>
+#include <chrono>
 #include <iostream>
 #include <thread>
 #include <unordered_map>
@@ -301,11 +302,12 @@ retry:
     bufnode->Lock ();
 
     if (D_RO (target)->local_depth != bufnode->local_depth) {
-        // printf ("D_RO (target)->local_depth =%lu bufnode->local_depth = %lu\n",
-        //         D_RO (target)->local_depth, bufnode->local_depth);
         bufnode->Unlock ();
         std::this_thread::yield ();
         goto retry;
+    }
+    if (bufnode->readByPass) {
+        bufnode->readByPass = false;
     }
 
     bool res = bufnode->Put (key, (char *)value);
@@ -749,7 +751,7 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool *pop, WriteBuffer *bufnode, S
         }
 
     } else {  // all records in bufnode has been merge to new_segment_dram
-
+        bufnode->readByPass = true;
         TOID (struct Segment) new_segment;
         POBJ_ALLOC (pop, &new_segment, struct Segment, sizeof (struct Segment), NULL, NULL);
         // persist the new segment
@@ -827,14 +829,18 @@ RETRY:
         std::this_thread::yield ();
         goto RETRY;
     }
-
-    char *val;
-    auto res = D_RW (dir)->bufnodes[x]->Get (key, val);
-
-    if (res) {
-        return Value_t (val);
-    } else {
+    return get (key);
+    if (D_RW (dir)->bufnodes[x]->readByPass) {
         return get (key);
+    } else {
+        char *val;
+        auto res = D_RW (dir)->bufnodes[x]->Get (key, val);
+
+        if (res) {
+            return Value_t (val);
+        } else {
+            return get (key);
+        }
     }
 }
 
@@ -1034,7 +1040,7 @@ retry:
 
     auto *bufnode = D_RO (dir)->bufnodes[x];
 
-    auto data = D_RW (target)->logPtr.getData ();
+    auto data = bufnode->logPtr.getData ();
     auto next_ = 0;
     // data == 256 means it is the first time to use this buffer
     if (data == 256) {
@@ -1044,7 +1050,8 @@ retry:
         next_ = bufferLogNodes[tid].Append (buflog::kDataLogNodeValid, key, (uint64_t)value, data,
                                             false);
     }
-    D_RW (target)->logPtr.setData (tid, next_);
+    bufnode->logPtr.setData (tid, next_);
+
     // pmemobj_persist (pop, (char *)&D_RO (target)->logPtr, sizeof (buflog_recovery::LogPtr));
     // pop.root ()->BufferLogNodes.persist ();
     // D_RW (target)->logPtr.persist ();
@@ -1057,15 +1064,19 @@ retry:
         goto retry;
     }
 
+    if (bufnode->readByPass) {
+        bufnode->readByPass = false;
+    }
+
     bool res = bufnode->Put (key, (char *)value);
     if (res) {
         // successfully insert to bufnode
         bufnode->Unlock ();
     } else {
-        data = D_RW (target)->logPtr.getData ();
+        data = bufnode->logPtr.getData ();
         next_ = bufferLogNodes[tid].Append (buflog::kDataLogNodeCheckpoint, key, (uint64_t)value,
                                             data, false);
-        D_RW (target)->logPtr.setData (tid, next_);
+        bufnode->logPtr.setData (tid, next_);
 
         curMCNum.fetch_add (1, std::memory_order_relaxed);
         // bufnode is full. merge to CCEH
@@ -1091,4 +1102,35 @@ retry:
         goto retry;
 #endif
     }
+}
+
+void CCEH::flushAllBuffers (PMEMobjpool *pop) {
+    // printf ("1.D_RO (dir)->capacity = %lu\n", D_RO (dir)->capacity);
+    for (int i = 0; i < D_RO (dir)->capacity;) {
+        auto bufnode = D_RW (dir)->bufnodes[i];
+        bufnode->Lock ();
+        auto iter = bufnode->Begin ();
+        int inserted = 0;
+        while (iter.Valid ()) {
+            inserted++;
+            auto &kv = *iter;
+            Key_t key = kv.key;
+            Value_t val = kv.val;
+            insert (pop, key, val, true);
+            ++iter;
+        }
+        bufnode->readByPass = true;
+        bufnode->Reset ();
+        bufnode->Unlock ();
+        auto tar = D_RW (D_RW (dir)->segment)[i];
+        int stride = pow (2, D_RO (dir)->depth - D_RW (tar)->local_depth);
+        i += stride;
+    }
+    // printf ("2.D_RO (dir)->capacity = %lu\n", D_RO (dir)->capacity);
+    // for (int i = 0; i < D_RO (dir)->capacity;) {
+    //     auto bufnode = D_RW (dir)->bufnodes[i];
+    //     bufnode->readByPass = true;
+
+    //     i += 1;
+    // }
 }

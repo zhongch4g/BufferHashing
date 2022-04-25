@@ -27,6 +27,10 @@ struct Pair {
     Value_t value;
 };
 
+struct Shadow {
+    uint64_t writes;
+};
+
 class CCEH;
 struct Directory;
 struct Segment;
@@ -116,6 +120,8 @@ struct Directory {
     static const size_t kDefaultDepth = 10;
 
     TOID_ARRAY (TOID (struct Segment)) segment;
+    Shadow** shadow;
+
     int64_t sema = 0;
     size_t capacity;
     size_t depth;
@@ -157,7 +163,6 @@ struct Directory {
         depth = kDefaultDepth;
         capacity = pow (2, depth);
         sema = 0;
-        // printf ("Directory double \n");
     }
 
     void initDirectory (size_t _depth) {
@@ -165,7 +170,6 @@ struct Directory {
         depth = _depth;
         capacity = pow (2, _depth);
         sema = 0;
-        printf ("Directory double %u \n", _depth);
     }
 };
 
@@ -185,6 +189,7 @@ public:
     double Utilization (void);
     size_t Capacity (void);
     void Recovery (PMEMobjpool*);
+    void ScanShadow (uint64_t ops);
 
     bool crashed = true;
     std::atomic<size_t> curSegmentNum;
