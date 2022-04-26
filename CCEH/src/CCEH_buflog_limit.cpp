@@ -1031,18 +1031,8 @@ retry:
         insert (pop, key, value, true);
         return isMinorCompaction;
     }
-
-    auto data = D_RW (target)->logPtr.getData ();
     auto next_ = 0;
-    // data == 256 means it is the first time to use this buffer
-    if (data == 256) {
-        next_ = bufferLogNodes[tid].Append (buflog::kDataLogNodeCheckpoint, key, (uint64_t)value,
-                                            data, false);
-    } else {
-        next_ = bufferLogNodes[tid].Append (buflog::kDataLogNodeValid, key, (uint64_t)value, data,
-                                            false);
-    }
-    D_RW (target)->logPtr.setData (tid, next_);
+
     bufnode->Lock ();
 
     if (D_RO (target)->local_depth != bufnode->local_depth) {
@@ -1053,11 +1043,22 @@ retry:
 
     bool res = bufnode->Put (key, (char *)value);
     if (res) {
+        auto data = D_RW (target)->logPtr.getData ();
+        // data == 256 means it is the first time to use this buffer
+        if (data == 256) {
+            next_ = bufferLogNodes[tid].Append (buflog::kDataLogNodeCheckpoint, key,
+                                                (uint64_t)value, data, false);
+        } else {
+            next_ = bufferLogNodes[tid].Append (buflog::kDataLogNodeValid, key, (uint64_t)value,
+                                                data, false);
+        }
+        D_RW (target)->logPtr.setData (tid, next_);
+
         // successfully insert to bufnode
         bufnode->Unlock ();
         return isMinorCompaction;
     } else {
-        data = D_RW (target)->logPtr.getData ();
+        auto data = D_RW (target)->logPtr.getData ();
         next_ = bufferLogNodes[tid].Append (buflog::kDataLogNodeCheckpoint, key, (uint64_t)value,
                                             data, false);
         D_RW (target)->logPtr.setData (tid, next_);

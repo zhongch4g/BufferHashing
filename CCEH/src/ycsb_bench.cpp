@@ -717,7 +717,7 @@ public:
             // }
         }
 
-        D_RW (hashtable_)->Capacity ();
+        // D_RW (hashtable_)->Capacity ();
         return;
     }
 

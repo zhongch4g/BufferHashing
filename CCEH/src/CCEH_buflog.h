@@ -184,9 +184,9 @@ public:
 
     void Insert (PMEMobjpool *, Key_t &, Value_t);
     void InsertWithLog (PMEMobjpool *, Key_t &, Value_t, int);
-    void insert (PMEMobjpool *, Key_t &, Value_t, bool with_lock);
+    void insert (PMEMobjpool *, Key_t &, Value_t, bool with_lock, bool isSplit);
     void mergeBufAndSplitWhenNeeded (PMEMobjpool *, WriteBuffer *bufnode, Segment_toid &target,
-                                     size_t x);
+                                     size_t f_hash);
     bool InsertOnly (PMEMobjpool *, Key_t &, Value_t);
     bool Delete (Key_t &);
     Value_t Get (Key_t &);

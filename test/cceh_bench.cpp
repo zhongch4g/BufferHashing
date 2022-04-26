@@ -782,8 +782,13 @@ public:
 
         thread->stats.real_finish_ = NowMicros ();
 
-        D_RW (hashtable_)->flushAllBuffers (pop_);
-
+        if (thread->tid >= 0) {
+            thread_counter.fetch_add (1);
+        }
+        // printf ("%lu, %lu\n", thread_counter.load (), FLAGS_thread);
+        if (thread_counter.load () >= FLAGS_thread) {
+            D_RW (hashtable_)->flushAllBuffers (pop_);
+        }
         return;
     }
 

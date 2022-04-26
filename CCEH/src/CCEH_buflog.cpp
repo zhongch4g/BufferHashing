@@ -296,7 +296,7 @@ void CCEH::Insert (PMEMobjpool *pop, Key_t &key, Value_t value) {
 retry:
     auto x = (f_hash >> (8 * sizeof (f_hash) - D_RO (dir)->depth));
     auto target = D_RO (D_RO (dir)->segment)[x];
-
+    bool isSplit = false;
     auto *bufnode = D_RO (dir)->bufnodes[x];
 
     bufnode->Lock ();
@@ -323,7 +323,7 @@ retry:
             auto &kv = *iter;
             Key_t key = kv.key;
             Value_t val = kv.val;
-            insert (pop, key, val, false);
+            insert (pop, key, val, false, isSplit);
             ++iter;
         }
 #ifdef WITHOUT_FLUSH
@@ -341,7 +341,7 @@ retry:
     }
 }
 
-void CCEH::insert (PMEMobjpool *pop, Key_t &key, Value_t value, bool with_lock) {
+void CCEH::insert (PMEMobjpool *pop, Key_t &key, Value_t value, bool with_lock, bool isSplit) {
     auto f_hash = hash_funcs[0](&key, sizeof (Key_t), f_seed);
     auto f_idx = (f_hash & kMask) * kNumPairPerCacheLine;
 
@@ -446,7 +446,6 @@ RETRY:
 #endif
 
     TOID (struct Segment) *s = D_RW (target)->Split (pop);
-
     // After segment split -> create new Writebuffer for split_segment_bufnode
     WriteBuffer *split_segment_bufnode = new WriteBuffer (D_RW (s[1])->local_depth, 32 * (1 + 0.3));
     // update new_segment_bufnode local depth
@@ -466,6 +465,7 @@ DIR_RETRY:
             goto DIR_RETRY;
         }
         printf ("Double dir\n");
+        isSplit = true;
 
         x = (f_hash >> (8 * sizeof (f_hash) - D_RO (dir)->depth));
         auto dir_old = dir;
@@ -608,7 +608,6 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool *pop, WriteBuffer *bufnode, S
     }
 
     if (iter.Valid ()) {  // we have to split new_segment_dram
-
         auto target_local_depth = D_RO (target)->local_depth;
         // INFO("Split segment %lu. depth %lu, ", x, target_local_depth);
 
@@ -829,10 +828,11 @@ RETRY:
         std::this_thread::yield ();
         goto RETRY;
     }
-    return get (key);
+    // return get (key);
     if (D_RW (dir)->bufnodes[x]->readByPass) {
         return get (key);
     } else {
+        exit (1);
         char *val;
         auto res = D_RW (dir)->bufnodes[x]->Get (key, val);
 
@@ -1033,28 +1033,12 @@ Value_t CCEH::FindAnyway (Key_t &key) {
 
 void CCEH::InsertWithLog (PMEMobjpool *pop, Key_t &key, Value_t value, int tid) {
     auto f_hash = hash_funcs[0](&key, sizeof (Key_t), f_seed);
-
 retry:
     auto x = (f_hash >> (8 * sizeof (f_hash) - D_RO (dir)->depth));
     auto target = D_RO (D_RO (dir)->segment)[x];
-
+    bool isSplit = false;
     auto *bufnode = D_RO (dir)->bufnodes[x];
-
-    auto data = bufnode->logPtr.getData ();
     auto next_ = 0;
-    // data == 256 means it is the first time to use this buffer
-    if (data == 256) {
-        next_ = bufferLogNodes[tid].Append (buflog::kDataLogNodeCheckpoint, key, (uint64_t)value,
-                                            data, false);
-    } else {
-        next_ = bufferLogNodes[tid].Append (buflog::kDataLogNodeValid, key, (uint64_t)value, data,
-                                            false);
-    }
-    bufnode->logPtr.setData (tid, next_);
-
-    // pmemobj_persist (pop, (char *)&D_RO (target)->logPtr, sizeof (buflog_recovery::LogPtr));
-    // pop.root ()->BufferLogNodes.persist ();
-    // D_RW (target)->logPtr.persist ();
 
     bufnode->Lock ();
 
@@ -1070,10 +1054,25 @@ retry:
 
     bool res = bufnode->Put (key, (char *)value);
     if (res) {
+        auto data = bufnode->logPtr.getData ();
+        // data == 256 means it is the first time to use this buffer
+        if (data == 256) {
+            next_ = bufferLogNodes[tid].Append (buflog::kDataLogNodeCheckpoint, key,
+                                                (uint64_t)value, data, false);
+        } else {
+            next_ = bufferLogNodes[tid].Append (buflog::kDataLogNodeValid, key, (uint64_t)value,
+                                                data, false);
+        }
+        bufnode->logPtr.setData (tid, next_);
+
+        // pmemobj_persist (pop, (char *)&D_RO (target)->logPtr, sizeof (buflog_recovery::LogPtr));
+        // pop.root ()->BufferLogNodes.persist ();
+        // D_RW (target)->logPtr.persist ();
+
         // successfully insert to bufnode
         bufnode->Unlock ();
     } else {
-        data = bufnode->logPtr.getData ();
+        auto data = bufnode->logPtr.getData ();
         next_ = bufferLogNodes[tid].Append (buflog::kDataLogNodeCheckpoint, key, (uint64_t)value,
                                             data, false);
         bufnode->logPtr.setData (tid, next_);
@@ -1086,7 +1085,7 @@ retry:
             auto &kv = *iter;
             Key_t key = kv.key;
             Value_t val = kv.val;
-            insert (pop, key, val, false);
+            insert (pop, key, val, false, isSplit);
             ++iter;
         }
 #ifdef WITHOUT_FLUSH
@@ -1105,10 +1104,15 @@ retry:
 }
 
 void CCEH::flushAllBuffers (PMEMobjpool *pop) {
-    // printf ("1.D_RO (dir)->capacity = %lu\n", D_RO (dir)->capacity);
+    WriteBuffer **bnodes =
+        reinterpret_cast<WriteBuffer **> (malloc (sizeof (WriteBuffer *) * D_RO (dir)->capacity));
+    auto cp = D_RO (dir)->capacity;
+
     for (int i = 0; i < D_RO (dir)->capacity;) {
-        auto bufnode = D_RW (dir)->bufnodes[i];
+        auto *bufnode = D_RW (dir)->bufnodes[i];
+        bool isSplit = false;
         bufnode->Lock ();
+        bnodes[i] = new WriteBuffer (bufnode->local_depth, 32 * (1 + 0.3));
         auto iter = bufnode->Begin ();
         int inserted = 0;
         while (iter.Valid ()) {
@@ -1116,21 +1120,47 @@ void CCEH::flushAllBuffers (PMEMobjpool *pop) {
             auto &kv = *iter;
             Key_t key = kv.key;
             Value_t val = kv.val;
-            insert (pop, key, val, true);
+            bnodes[i]->Put (kv.key, kv.val);
             ++iter;
         }
         bufnode->readByPass = true;
         bufnode->Reset ();
         bufnode->Unlock ();
+
+        int stride = pow (2, D_RO (dir)->depth - bufnode->local_depth);
+        i += stride;
+    }
+    printf ("finished transfer \n");
+    uint64_t inserted = 0;
+    for (int i = 0; i < cp;) {
+        auto *bufnode = bnodes[i];
+        bool isSplit = false;
+        bufnode->Lock ();
+        auto iter = bufnode->Begin ();
+        while (iter.Valid ()) {
+            inserted++;
+            auto &kv = *iter;
+            Key_t key = kv.key;
+            Value_t val = kv.val;
+            insert (pop, key, val, false, isSplit);
+            ++iter;
+        }
+        bufnode->Reset ();
+        bufnode->Unlock ();
+        int stride = pow (2, D_RO (dir)->depth - bufnode->local_depth);
+        i += stride;
+    }
+    printf ("inserted = %lu\n", inserted);
+
+    uint64_t segments = 0;
+    for (int i = 0; i < D_RO (dir)->capacity;) {
+        auto *bufnode = D_RW (dir)->bufnodes[i];
+        bufnode->Reset ();
+        bufnode->readByPass = true;
+        segments++;
         auto tar = D_RW (D_RW (dir)->segment)[i];
         int stride = pow (2, D_RO (dir)->depth - D_RW (tar)->local_depth);
         i += stride;
     }
-    // printf ("2.D_RO (dir)->capacity = %lu\n", D_RO (dir)->capacity);
-    // for (int i = 0; i < D_RO (dir)->capacity;) {
-    //     auto bufnode = D_RW (dir)->bufnodes[i];
-    //     bufnode->readByPass = true;
-
-    //     i += 1;
-    // }
+    printf ("segments = %lu\n", segments);
 }
