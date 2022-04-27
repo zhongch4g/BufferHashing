@@ -9,7 +9,7 @@
 #include <cstring>
 #include <vector>
 
-#include "../../src/buflog.h"
+#include "../../src/buflog_recovery.h"
 #include "util.h"
 
 #define TOID_ARRAY(x) TOID (x)
@@ -47,7 +47,7 @@ constexpr size_t kNumPairPerCacheLine = 4;
 constexpr size_t kNumCacheLine = 8;
 constexpr size_t kCuckooThreshold = 16;
 
-using WriteBuffer = buflog::WriteBuffer;
+using WriteBuffer = buflog_recovery::WriteBuffer;
 // constexpr size_t kCuckooThreshold = 32;
 class BufferConfig {
 public:
@@ -139,7 +139,6 @@ struct Segment {
     int64_t sema = 0;
     size_t local_depth;
     CCEH *cceh;
-    buflog::LogPtr logPtr;
 };
 
 struct Directory {
@@ -229,7 +228,7 @@ public:
     // to limit the number of buffer in use
     std::atomic<size_t> curBufferNum;
     std::atomic<size_t> curSegmentNum;
-    buflog::linkedredolog::BufferLogNode *bufferLogNodes;
+    buflog_recovery::linkedredolog::BufferLogNode *bufferLogNodes;
 
 private:
     TOID (struct Directory) dir;

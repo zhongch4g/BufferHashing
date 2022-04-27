@@ -1,15 +1,13 @@
-#include "CCEH_buflog.h"
-
 #include <stdio.h>
 
 #include <bitset>
 #include <cassert>
-#include <chrono>
 #include <iostream>
 #include <thread>
 #include <unordered_map>
 #include <vector>
 
+#include "CCEH_buflog_wal.h"
 #include "hash.h"
 #include "logger.h"
 #include "util.h"
@@ -26,10 +24,12 @@
 #define CONFIG_OUT_OF_PLACE_MERGE
 
 using namespace std;
-using namespace cceh_buflog;
+namespace cceh_buflog_wal {
 
+// 1K 4 2K 8 4K 16 8K 32 16K 64
 // const vector<uint64_t> enum_buffersize = {16, 32, 48};
 const vector<uint64_t> enum_buffersize = {8, 32, 56};
+std::atomic<uint64_t> counter (0);
 
 uint64_t get_random () {
     std::random_device dev;
@@ -119,7 +119,7 @@ bool Segment::Insert4split (Key_t &key, Value_t value, size_t loc) {
     return 0;
 }
 
-Segment *Segment::SplitDram (WriteBuffer::Iterator &iter) {
+Segment *Segment::SplitDram (PMEMobjpool *pop, WriteBuffer::Iterator &iter) {
     Segment *split = new Segment ();
     // splits[0].initSegment(local_depth+1); //   old segment
     split->initSegment (local_depth + 1);  // split segment
@@ -239,30 +239,6 @@ void CCEH::initCCEH (PMEMobjpool *pop) {
     }
 }
 
-void CCEH::initCCEH (PMEMobjpool *pop, size_t initCap) {
-    crashed = true;
-    POBJ_ALLOC (pop, &dir, struct Directory, sizeof (struct Directory), NULL, NULL);
-    D_RW (dir)->initDirectory (static_cast<size_t> (log2 (initCap)));
-    POBJ_ALLOC (pop, &D_RW (dir)->segment, TOID (struct Segment),
-                sizeof (TOID (struct Segment)) * D_RO (dir)->capacity, NULL, NULL);
-
-    // Create and initial the in-DRAM buffer
-    D_RW (dir)->bufnodes =
-        reinterpret_cast<WriteBuffer **> (malloc (sizeof (WriteBuffer *) * D_RO (dir)->capacity));
-
-    for (int i = 0; i < D_RO (dir)->capacity; ++i) {
-        POBJ_ALLOC (pop, &D_RO (D_RO (dir)->segment)[i], struct Segment, sizeof (struct Segment),
-                    NULL, NULL);
-        D_RW (D_RW (D_RW (dir)->segment)[i])->initSegment (static_cast<size_t> (log2 (initCap)));
-        D_RW (dir)->bufnodes[i] =
-            new WriteBuffer (static_cast<size_t> (log2 (initCap)), 32 * (1 + 0.3));
-        curSegmentNum.fetch_add (1, std::memory_order_relaxed);
-    }
-}
-
-/*
-    For the Buffer Hashing with Log
-*/
 void CCEH::initCCEH (PMEMobjpool *pop, size_t initCap, size_t nthreads, PMEMoid *logAddrs) {
     crashed = true;
     POBJ_ALLOC (pop, &dir, struct Directory, sizeof (struct Directory), NULL, NULL);
@@ -290,14 +266,20 @@ void CCEH::initCCEH (PMEMobjpool *pop, size_t initCap, size_t nthreads, PMEMoid 
     }
 }
 
-void CCEH::Insert (PMEMobjpool *pop, Key_t &key, Value_t value) {
+void CCEH::InsertWithLog (PMEMobjpool *pop, Key_t &key, Value_t value, int tid) {
     auto f_hash = hash_funcs[0](&key, sizeof (Key_t), f_seed);
 
 retry:
     auto x = (f_hash >> (8 * sizeof (f_hash) - D_RO (dir)->depth));
     auto target = D_RO (D_RO (dir)->segment)[x];
-    bool isSplit = false;
+
     auto *bufnode = D_RO (dir)->bufnodes[x];
+
+    auto next_ = 0;
+
+    // pmemobj_persist (pop, (char *)&D_RO (target)->logPtr, sizeof (buflog_recovery::LogPtr));
+    // pop.root ()->BufferLogNodes.persist ();
+    // D_RW (target)->logPtr.persist ();
 
     bufnode->Lock ();
 
@@ -306,15 +288,27 @@ retry:
         std::this_thread::yield ();
         goto retry;
     }
-    if (bufnode->readByPass) {
-        bufnode->readByPass = false;
-    }
 
     bool res = bufnode->Put (key, (char *)value);
     if (res) {
+        auto data = D_RW (target)->logPtr.getData ();
+        // data == 256 means it is the first time to use this buffer
+        if (data == 256) {
+            next_ = bufferLogNodes[tid].Append (buflog_recovery::kDataLogNodeCheckpoint, key,
+                                                (uint64_t)value, data, false);
+        } else {
+            next_ = bufferLogNodes[tid].Append (buflog_recovery::kDataLogNodeValid, key,
+                                                (uint64_t)value, data, false);
+        }
+        D_RW (target)->logPtr.setData (tid, next_);
         // successfully insert to bufnode
         bufnode->Unlock ();
     } else {
+        auto data = D_RW (target)->logPtr.getData ();
+        next_ = bufferLogNodes[tid].Append (buflog_recovery::kDataLogNodeCheckpoint, key,
+                                            (uint64_t)value, data, false);
+        D_RW (target)->logPtr.setData (tid, next_);
+
         curMCNum.fetch_add (1, std::memory_order_relaxed);
         // bufnode is full. merge to CCEH
 #ifndef CONFIG_OUT_OF_PLACE_MERGE
@@ -323,7 +317,7 @@ retry:
             auto &kv = *iter;
             Key_t key = kv.key;
             Value_t val = kv.val;
-            insert (pop, key, val, false, isSplit);
+            insert (pop, key, val, false);
             ++iter;
         }
 #ifdef WITHOUT_FLUSH
@@ -341,7 +335,7 @@ retry:
     }
 }
 
-void CCEH::insert (PMEMobjpool *pop, Key_t &key, Value_t value, bool with_lock, bool isSplit) {
+void CCEH::insert (PMEMobjpool *pop, Key_t &key, Value_t value, bool with_lock) {
     auto f_hash = hash_funcs[0](&key, sizeof (Key_t), f_seed);
     auto f_idx = (f_hash & kMask) * kNumPairPerCacheLine;
 
@@ -446,6 +440,7 @@ RETRY:
 #endif
 
     TOID (struct Segment) *s = D_RW (target)->Split (pop);
+
     // After segment split -> create new Writebuffer for split_segment_bufnode
     WriteBuffer *split_segment_bufnode = new WriteBuffer (D_RW (s[1])->local_depth, 32 * (1 + 0.3));
     // update new_segment_bufnode local depth
@@ -465,7 +460,6 @@ DIR_RETRY:
             goto DIR_RETRY;
         }
         printf ("Double dir\n");
-        isSplit = true;
 
         x = (f_hash >> (8 * sizeof (f_hash) - D_RO (dir)->depth));
         auto dir_old = dir;
@@ -608,11 +602,12 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool *pop, WriteBuffer *bufnode, S
     }
 
     if (iter.Valid ()) {  // we have to split new_segment_dram
+
         auto target_local_depth = D_RO (target)->local_depth;
         // INFO("Split segment %lu. depth %lu, ", x, target_local_depth);
 
         // step 1. Split the dram segment
-        Segment *split = old_segment_dram.SplitDram (iter);
+        Segment *split = old_segment_dram.SplitDram (pop, iter);
         Segment *split_segment_dram = split;
         Segment *new_segment_dram = &old_segment_dram;
         new_segment_dram->local_depth = split_segment_dram->local_depth;
@@ -750,7 +745,7 @@ void CCEH::mergeBufAndSplitWhenNeeded (PMEMobjpool *pop, WriteBuffer *bufnode, S
         }
 
     } else {  // all records in bufnode has been merge to new_segment_dram
-        bufnode->readByPass = true;
+
         TOID (struct Segment) new_segment;
         POBJ_ALLOC (pop, &new_segment, struct Segment, sizeof (struct Segment), NULL, NULL);
         // persist the new segment
@@ -828,19 +823,40 @@ RETRY:
         std::this_thread::yield ();
         goto RETRY;
     }
-    // return get (key);
-    if (D_RW (dir)->bufnodes[x]->readByPass) {
-        return get (key);
-    } else {
-        exit (1);
-        char *val;
-        auto res = D_RW (dir)->bufnodes[x]->Get (key, val);
 
-        if (res) {
-            return Value_t (val);
+    if (!D_RW (dir)->bufnodes[x]->isRecovered) {
+        if (!D_RW (dir)->bufnodes[x]->isRecovering) {
+            D_RW (dir)->bufnodes[x]->isRecovering = true;
+
         } else {
-            return get (key);
+            uint64_t logid = D_RW (target)->logPtr.getLogId ();
+            uint64_t offset = D_RW (target)->logPtr.getOffset ();
+            char *current = bufferLogNodes[logid].currentAddr (offset);
+            uint64_t key = *(uint64_t *)(current - 16);
+            uint64_t value = *(uint64_t *)(current - 8);
+            uint64_t nextdata = *(uint64_t *)(current + 2);
+
+            while (bufferLogNodes[logid].IsValidPoint (offset)) {
+                D_RW (dir)->bufnodes[x]->Put (key, (char *)value);
+                // find next
+                logid = nextdata >> 48;
+                offset = nextdata & 0x000FFFFFFFFFFFF;
+                current = bufferLogNodes[logid].currentAddr (offset);
+                key = *(uint64_t *)(current - 16);
+                value = *(uint64_t *)(current - 8);
+                nextdata = *(uint64_t *)(current + 2);
+            }
+            D_RW (dir)->bufnodes[x]->isRecovered = true;
         }
+    }
+
+    char *val;
+    auto res = D_RW (dir)->bufnodes[x]->Get (key, val);
+
+    if (res) {
+        return Value_t (val);
+    } else {
+        return get (key);
     }
 }
 
@@ -908,72 +924,25 @@ RETRY:
     return NONE;
 }
 
-void CCEH::Recovery (PMEMobjpool *pop, int nthreads) {
+void CCEH::Recovery (PMEMobjpool *pop) {
     size_t i = 0;
-    D_RW (dir)->bufnodes =
-        reinterpret_cast<WriteBuffer **> (malloc (sizeof (WriteBuffer *) * D_RO (dir)->capacity));
-    bufferLogNodes = new buflog_recovery::linkedredolog::BufferLogNode[nthreads];
     while (i < D_RO (dir)->capacity) {
         size_t depth_cur = D_RO (D_RO (D_RO (dir)->segment)[i])->local_depth;
-        // re-construct buffer
-        D_RW (dir)->bufnodes[i] = new WriteBuffer (depth_cur, 32 * (1 + 0.3));
         size_t stride = pow (2, D_RO (dir)->depth - depth_cur);
         size_t buddy = i + stride;
         if (buddy == D_RO (dir)->capacity) break;
         for (int j = buddy - 1; i < j; j--) {
-            D_RW (dir)->bufnodes[j] = D_RW (dir)->bufnodes[i];
             if (D_RO (D_RO (D_RO (dir)->segment)[j])->local_depth != depth_cur) {
                 D_RW (D_RW (dir)->segment)[j] = D_RO (D_RO (dir)->segment)[i];
                 pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[i],
                                  sizeof (TOID (struct Segment)));
             }
+            D_RW (dir)->bufnodes[j]->isRecovered = false;
         }
         i += stride;
     }
     pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[0],
                      sizeof (TOID (struct Segment)) * D_RO (dir)->capacity);
-}
-
-inline uint64_t NowMicros () {
-    static constexpr uint64_t kUsecondsPerSecond = 1000000;
-    struct ::timeval tv;
-    ::gettimeofday (&tv, nullptr);
-    return static_cast<uint64_t> (tv.tv_sec) * kUsecondsPerSecond + tv.tv_usec;
-}
-
-void CCEH::BufferRecovery (PMEMobjpool *pop, uint64_t nthread, int tid, PMEMoid *logAddrs) {
-    // Recovery all the data at once.
-    uint64_t start1_ = NowMicros ();
-    // ensure the consistent of the directory entries
-    DEBUG ("Start Recovery Buffer ..");
-    uint64_t cntRecovery = 0;
-    void *log_base_addr = pmemobj_direct (logAddrs[tid]);
-    bufferLogNodes[tid].Open ((char *)log_base_addr);
-
-    char *start = (char *)log_base_addr + 256 + 17;
-    uint64_t test = 256 + 17;
-    while (1) {
-        uint64_t key = *(uint64_t *)(start - 16);
-        uint64_t val = *(uint64_t *)(start - 8);
-        uint8_t tag = *(uint8_t *)(start);
-        // printf ("tag = %hhu \n", tag);
-        if (tag != 16 && tag != 18) break;
-
-        auto f_hash = hash_funcs[0](&key, sizeof (Key_t), f_seed);
-        auto x = (f_hash >> (8 * sizeof (f_hash) - D_RO (dir)->depth));
-
-        D_RW (dir)->bufnodes[x]->PutWithLog (key, (char *)val);
-
-        start = start + 27;
-        test += 27;
-        cntRecovery++;
-    }
-
-    // ptr->bufnode_ = new WriteBuffer (ptr->local_depth, 32 + (1 + 0.3));
-
-    uint64_t end1_ = NowMicros ();
-    printf ("Finished Recovery in %2.10f secs (total = %lu) \n", (end1_ - start1_) / 1000000.0,
-            cntRecovery);
 }
 
 double CCEH::Utilization (void) {
@@ -1031,136 +1000,4 @@ Value_t CCEH::FindAnyway (Key_t &key) {
     return NONE;
 }
 
-void CCEH::InsertWithLog (PMEMobjpool *pop, Key_t &key, Value_t value, int tid) {
-    auto f_hash = hash_funcs[0](&key, sizeof (Key_t), f_seed);
-retry:
-    auto x = (f_hash >> (8 * sizeof (f_hash) - D_RO (dir)->depth));
-    auto target = D_RO (D_RO (dir)->segment)[x];
-    bool isSplit = false;
-    auto *bufnode = D_RO (dir)->bufnodes[x];
-    auto next_ = 0;
-
-    bufnode->Lock ();
-
-    if (D_RO (target)->local_depth != bufnode->local_depth) {
-        bufnode->Unlock ();
-        std::this_thread::yield ();
-        goto retry;
-    }
-
-    if (bufnode->readByPass) {
-        bufnode->readByPass = false;
-    }
-
-    bool res = bufnode->Put (key, (char *)value);
-    if (res) {
-        auto data = bufnode->logPtr.getData ();
-        // data == 256 means it is the first time to use this buffer
-        if (data == 256) {
-            next_ = bufferLogNodes[tid].Append (buflog_recovery::kDataLogNodeCheckpoint, key,
-                                                (uint64_t)value, data, false);
-        } else {
-            next_ = bufferLogNodes[tid].Append (buflog_recovery::kDataLogNodeValid, key,
-                                                (uint64_t)value, data, false);
-        }
-        bufnode->logPtr.setData (tid, next_);
-
-        // pmemobj_persist (pop, (char *)&D_RO (target)->logPtr, sizeof (buflog_recovery::LogPtr));
-        // pop.root ()->BufferLogNodes.persist ();
-        // D_RW (target)->logPtr.persist ();
-
-        // successfully insert to bufnode
-        bufnode->Unlock ();
-    } else {
-        auto data = bufnode->logPtr.getData ();
-        next_ = bufferLogNodes[tid].Append (buflog_recovery::kDataLogNodeCheckpoint, key,
-                                            (uint64_t)value, data, false);
-        bufnode->logPtr.setData (tid, next_);
-
-        curMCNum.fetch_add (1, std::memory_order_relaxed);
-        // bufnode is full. merge to CCEH
-#ifndef CONFIG_OUT_OF_PLACE_MERGE
-        auto iter = bufnode->Begin ();
-        while (iter.Valid ()) {
-            auto &kv = *iter;
-            Key_t key = kv.key;
-            Value_t val = kv.val;
-            insert (pop, key, val, false, isSplit);
-            ++iter;
-        }
-#ifdef WITHOUT_FLUSH
-        pmemobj_persist (pop, (char *)&D_RO (D_RO (dir)->segment)[x],
-                         sizeof (TOID (struct Segment)));
-#endif
-        bufnode->Reset ();
-        bufnode->Unlock ();
-        goto retry;
-#else
-        mergeBufAndSplitWhenNeeded (pop, bufnode, target, f_hash);
-        bufnode->Unlock ();
-        goto retry;
-#endif
-    }
-}
-
-void CCEH::flushAllBuffers (PMEMobjpool *pop) {
-    WriteBuffer **bnodes =
-        reinterpret_cast<WriteBuffer **> (malloc (sizeof (WriteBuffer *) * D_RO (dir)->capacity));
-    auto cp = D_RO (dir)->capacity;
-
-    for (int i = 0; i < D_RO (dir)->capacity;) {
-        auto *bufnode = D_RW (dir)->bufnodes[i];
-        bool isSplit = false;
-        bufnode->Lock ();
-        bnodes[i] = new WriteBuffer (bufnode->local_depth, 32 * (1 + 0.3));
-        auto iter = bufnode->Begin ();
-        int inserted = 0;
-        while (iter.Valid ()) {
-            inserted++;
-            auto &kv = *iter;
-            Key_t key = kv.key;
-            Value_t val = kv.val;
-            bnodes[i]->Put (kv.key, kv.val);
-            ++iter;
-        }
-        bufnode->readByPass = true;
-        bufnode->Reset ();
-        bufnode->Unlock ();
-
-        int stride = pow (2, D_RO (dir)->depth - bufnode->local_depth);
-        i += stride;
-    }
-    printf ("finished transfer \n");
-    uint64_t inserted = 0;
-    for (int i = 0; i < cp;) {
-        auto *bufnode = bnodes[i];
-        bool isSplit = false;
-        bufnode->Lock ();
-        auto iter = bufnode->Begin ();
-        while (iter.Valid ()) {
-            inserted++;
-            auto &kv = *iter;
-            Key_t key = kv.key;
-            Value_t val = kv.val;
-            insert (pop, key, val, false, isSplit);
-            ++iter;
-        }
-        bufnode->Reset ();
-        bufnode->Unlock ();
-        int stride = pow (2, D_RO (dir)->depth - bufnode->local_depth);
-        i += stride;
-    }
-    printf ("inserted = %lu\n", inserted);
-
-    uint64_t segments = 0;
-    for (int i = 0; i < D_RO (dir)->capacity;) {
-        auto *bufnode = D_RW (dir)->bufnodes[i];
-        bufnode->Reset ();
-        bufnode->readByPass = true;
-        segments++;
-        auto tar = D_RW (D_RW (dir)->segment)[i];
-        int stride = pow (2, D_RO (dir)->depth - D_RW (tar)->local_depth);
-        i += stride;
-    }
-    printf ("segments = %lu\n", segments);
-}
+};  // namespace cceh_buflog_wal

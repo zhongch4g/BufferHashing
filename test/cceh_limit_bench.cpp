@@ -199,7 +199,7 @@ public:
             fprintf (stderr, "... finished %llu ops%30s\r", (unsigned long long)done_, "");
 
             if (FLAGS_report_interval == 0 && (done_ % FLAGS_stats_interval) == 0) {
-                // PrintSpeed ();
+                PrintSpeed ();
                 return true;
             }
             fflush (stderr);
@@ -208,7 +208,7 @@ public:
 
         if (FLAGS_report_interval && NowMicros () > next_report_time_) {
             next_report_time_ += FLAGS_report_interval * 1000000;
-            // PrintSpeed ();
+            PrintSpeed ();
             return false;
         }
         return true;

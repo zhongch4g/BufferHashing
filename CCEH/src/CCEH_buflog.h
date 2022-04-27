@@ -9,7 +9,7 @@
 #include <cstring>
 #include <vector>
 
-#include "../../src/buflog.h"
+#include "../../src/buflog_recovery.h"
 #include "util.h"
 
 #define TOID_ARRAY(x) TOID (x)
@@ -47,7 +47,7 @@ constexpr size_t kNumPairPerCacheLine = 4;
 constexpr size_t kNumCacheLine = 8;
 constexpr size_t kCuckooThreshold = 16;
 
-using WriteBuffer = buflog::WriteBuffer;
+using WriteBuffer = buflog_recovery::WriteBuffer;
 // constexpr size_t kCuckooThreshold = 32;
 
 struct Segment {
@@ -202,7 +202,7 @@ public:
     bool crashed = true;
     std::atomic<size_t> curSegmentNum;
     std::atomic<size_t> curMCNum;
-    buflog::linkedredolog::BufferLogNode *bufferLogNodes;
+    buflog_recovery::linkedredolog::BufferLogNode *bufferLogNodes;
 
 private:
     TOID (struct Directory) dir;

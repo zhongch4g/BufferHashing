@@ -299,7 +299,7 @@ void CCEH::initCCEH (PMEMobjpool *pop, size_t initCap, uint64_t bufferNum, size_
         }
         curSegmentNum.fetch_add (1, std::memory_order_relaxed);
     }
-    bufferLogNodes = new buflog::linkedredolog::BufferLogNode[nthreads];
+    bufferLogNodes = new buflog_recovery::linkedredolog::BufferLogNode[nthreads];
     for (size_t k = 0; k < nthreads; k++) {
         void *log_base_addr = pmemobj_direct (logAddrs[k]);
         bufferLogNodes[k].Create ((char *)log_base_addr, 10 * 1024 * 1024 * 1024LU / nthreads);
@@ -1043,25 +1043,25 @@ retry:
 
     bool res = bufnode->Put (key, (char *)value);
     if (res) {
-        auto data = D_RW (target)->logPtr.getData ();
+        auto data = bufnode->logPtr.getData ();
         // data == 256 means it is the first time to use this buffer
         if (data == 256) {
-            next_ = bufferLogNodes[tid].Append (buflog::kDataLogNodeCheckpoint, key,
+            next_ = bufferLogNodes[tid].Append (buflog_recovery::kDataLogNodeCheckpoint, key,
                                                 (uint64_t)value, data, false);
         } else {
-            next_ = bufferLogNodes[tid].Append (buflog::kDataLogNodeValid, key, (uint64_t)value,
-                                                data, false);
+            next_ = bufferLogNodes[tid].Append (buflog_recovery::kDataLogNodeValid, key,
+                                                (uint64_t)value, data, false);
         }
-        D_RW (target)->logPtr.setData (tid, next_);
+        bufnode->logPtr.setData (tid, next_);
 
         // successfully insert to bufnode
         bufnode->Unlock ();
         return isMinorCompaction;
     } else {
-        auto data = D_RW (target)->logPtr.getData ();
-        next_ = bufferLogNodes[tid].Append (buflog::kDataLogNodeCheckpoint, key, (uint64_t)value,
-                                            data, false);
-        D_RW (target)->logPtr.setData (tid, next_);
+        auto data = bufnode->logPtr.getData ();
+        next_ = bufferLogNodes[tid].Append (buflog_recovery::kDataLogNodeCheckpoint, key,
+                                            (uint64_t)value, data, false);
+        bufnode->logPtr.setData (tid, next_);
         // bufnode is full. merge to CCEH
 #ifndef CONFIG_OUT_OF_PLACE_MERGE
         auto iter = bufnode->Begin ();
