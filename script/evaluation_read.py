@@ -41,7 +41,7 @@ BH_TM = []
 BH_TP = []
 BH_R = []
 BH_W = []
-with open("../release/bufferhashing.data", "r") as f:
+with open("../release/bufferhashing_read.data", "r") as f:
     for iter in f.readlines():
         if ("*operations*" in iter):
             BH_OPS.append(float(iter.split()[-1]))
@@ -56,12 +56,12 @@ with open("../release/bufferhashing.data", "r") as f:
 
 print("Buffer Hashing", len(BH_OPS), len(BH_TM), len(BH_TP), len(BH_R), len(BH_W))
 
-BH_Write_Th = BH_TP[0::3]
-BH_Read_Th = BH_TP[1::3]
-BH_Write_IO = np.array(BH_W[0::3]) + np.array(BH_R[0::3])
-BH_Read_IO = np.array(BH_W[1::3]) + np.array(BH_R[1::3])
-BH_Write_BW = BH_Write_IO /np.array(BH_TM[0::3])
-BH_Read_BW = BH_Read_IO /np.array(BH_TM[1::3])
+BH_Write_Th = BH_TP[0::2]
+BH_Read_Th = BH_TP[1::2]
+BH_Write_IO = np.array(BH_W[0::2]) + np.array(BH_R[0::2])
+BH_Read_IO = np.array(BH_W[1::2]) + np.array(BH_R[1::2])
+BH_Write_BW = BH_Write_IO /np.array(BH_TM[0::2])
+BH_Read_BW = BH_Read_IO /np.array(BH_TM[1::2])
 
 
 DASH_OPS = []
@@ -113,36 +113,13 @@ if (args_len != 2):
 5. read IO
 6. read bandwidth
 """
-tmap = {"1":"write_throughput", "2":"write_IO", "3":"write_bandwidth", \
-    "4":"read_throughput", "5":"read_IO", "6":"read_bandwidth"}
+tmap = {"4":"read_throughput", "5":"read_IO", "6":"read_bandwidth"}
 gtype = sys.argv[1]
 
 Thread = [1, 2, 4, 8, 16, 20, 24, 28, 32, 36, 40]
 
 fig, ax = plt.subplots(figsize=(4, 3.6), constrained_layout=True)
 
-if (gtype == "1"):
-    ax.plot(Thread, BH_Write_Th, label="BHT", marker='*', color="#D62728", fillstyle='none', markersize=12)
-    ax.plot(Thread, CCEH_Write_Th, label="CCEH", marker='^', color="#0A640C", fillstyle='none', markersize=10)
-    ax.plot(Thread, DASH_Write_Th, label="DASH", marker='o', color="#2077B4", fillstyle='none', markersize=10)
-    ax.set_ylabel('Throughput (Mops/s)', fontsize=14)
-    ax.set_ylim([0.1, max(BH_Write_Th)*1.1])
-    ax.tick_params(axis="y",direction="in", pad=-20, labelsize=12)
-
-if (gtype == "2"):
-    ax.plot(Thread, DASH_Write_IO/1024, label="DASH", marker='o', color="#2077B4", fillstyle='none', markersize=10)
-    ax.plot(Thread, CCEH_Write_IO/1024, label="CCEH", marker='^', color="#0A640C", fillstyle='none', markersize=10)
-    ax.plot(Thread, BH_Write_IO/1024, label="BHT", marker='*', color="#D62728", fillstyle='none', markersize=12)
-    ax.set_ylabel('Pmem I/O (GB)', fontsize=14)
-    ax.tick_params(axis="y",direction="in", pad=-28, labelsize=12)
-
-if (gtype == "3"):
-    ax.plot(Thread, CCEH_Write_BW/1024, label="CCEH", marker='^', color="#0A640C", fillstyle='none', markersize=10)
-    ax.plot(Thread, DASH_Write_BW/1024, label="DASH", marker='o', color="#2077B4", fillstyle='none', markersize=10)
-    ax.plot(Thread, BH_Write_BW/1024, label="BHT", marker='*', color="#D62728", fillstyle='none', markersize=12)
-    ax.set_ylabel('Pmem Bandwidth (GB/s)', fontsize=14)
-    ax.tick_params(axis="y",direction="in", pad=-21, labelsize=12)
-    ax.yaxis.set_ticks(np.arange(0, 20, 5))
 
 if (gtype == "4"):
     ax.plot(Thread, BH_Read_Th, label="BH", marker='*', color="#D62728", fillstyle='none', markersize=12)
@@ -164,6 +141,7 @@ if (gtype == "6"):
     ax.plot(Thread, BH_Read_BW/1024, label="BH", marker='*', color="#D62728", fillstyle='none', markersize=12)
     ax.plot(Thread, DASH_Read_BW/1024, label="DASH", marker='o', color="#2077B4", fillstyle='none', markersize=10)
     ax.set_ylabel('Pmem Bandwidth (GB/s)', fontsize=14)
+    ax.tick_params(axis="y",direction="in", pad=-20, labelsize=12)
 
 ystart, yend = ax.get_ylim()
 ax.set_ylim([0.1, yend*1.09])
@@ -174,4 +152,4 @@ ax.tick_params(axis="x", labelsize=12)
 ax.set_xlabel('# of Threads', fontsize=14)
 
 ax.legend(loc='upper center', ncol=3, borderaxespad=0.3, frameon=False)
-fig.savefig("evaluation/" + tmap[gtype] + "_slogging.pdf", bbox_inches='tight', pad_inches=0)
+fig.savefig("evaluation/" + tmap[gtype] + "_read.pdf", bbox_inches='tight', pad_inches=0)

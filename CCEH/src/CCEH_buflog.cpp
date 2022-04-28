@@ -832,7 +832,7 @@ RETRY:
     if (D_RW (dir)->bufnodes[x]->readByPass) {
         return get (key);
     } else {
-        exit (1);
+        // exit (1);
         char *val;
         auto res = D_RW (dir)->bufnodes[x]->Get (key, val);
 
